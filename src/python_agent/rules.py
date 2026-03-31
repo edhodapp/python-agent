@@ -44,6 +44,14 @@ For each task:
 Never leave code in a state that fails any check. If you cannot meet
 a standard, stop and report why — do not ship code that violates the rules.
 
+WARNING REQUIREMENT: If you run out of turns or budget before completing
+step 8 (functional test gap analysis), you MUST print the following as
+your final output:
+  WARNING: Functional test gap analysis did not complete.
+  Remaining gaps: <list the gaps you identified but did not close>
+This warning is mandatory — never commit silently without completing
+the analysis.
+
 Always use the project venv at {project_dir}/.venv/. Never use system Python.
 """
 
