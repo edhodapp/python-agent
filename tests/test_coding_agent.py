@@ -56,6 +56,13 @@ class TestPrintTextBlocks:
         assert "two" in captured.out
 
 
+class TestEscalationModel:
+    """Tests for ESCALATION_MODEL constant."""
+
+    def test_value(self):
+        assert ESCALATION_MODEL == "claude-opus-4-6"
+
+
 class TestRunQuery:
     """Tests for run_query()."""
 
@@ -99,7 +106,7 @@ class TestRunQuery:
             result = await run_query("task", MagicMock())
 
         captured = capsys.readouterr()
-        assert "0.0042" in captured.out
+        assert captured.out == "\nDone. Cost: $0.0042\n"
         assert result is msg
 
     @pytest.mark.asyncio
@@ -226,6 +233,24 @@ class TestRun:
         assert mock_rq.call_count == 1
 
     @pytest.mark.asyncio
+    async def test_first_call_options(self):
+        result = MagicMock(
+            is_error=False, num_turns=5, total_cost_usd=0.01,
+        )
+        mock_rq = AsyncMock(return_value=result)
+        with patch("python_agent.coding_agent.run_query", mock_rq):
+            await run("task", "/proj", "claude-sonnet-4-6", 10, 5.0)
+        opts = mock_rq.call_args_list[0][0][1]
+        assert opts.model == "claude-sonnet-4-6"
+        expected_tools = ["Read", "Edit", "Bash", "Glob", "Grep"]
+        assert opts.allowed_tools == expected_tools
+        assert opts.permission_mode == "bypassPermissions"
+        assert opts.max_turns == 10
+        assert opts.max_budget_usd == 5.0
+        assert opts.cwd == "/proj"
+        assert opts.system_prompt is not None
+
+    @pytest.mark.asyncio
     async def test_escalates_on_error(self, capsys):
         error_result = MagicMock(
             is_error=True, num_turns=3, total_cost_usd=0.50,
@@ -234,13 +259,13 @@ class TestRun:
         with patch("python_agent.coding_agent.run_query", mock_rq):
             await run("task", "/tmp", "claude-sonnet-4-6", 10, 5.0)
         assert mock_rq.call_count == 2
-        second_call = mock_rq.call_args_list[1]
-        assert "Partial changes" in second_call[0][0]
-        assert (
-            second_call[0][1].model == ESCALATION_MODEL
-        )
+        escalation_task = mock_rq.call_args_list[1][0][0]
+        assert "Continue this task" in escalation_task
+        assert "Partial changes may already exist" in escalation_task
+        assert "in the working directory" in escalation_task
+        assert escalation_task.endswith("task")
         captured = capsys.readouterr()
-        assert "Escalating" in captured.out
+        assert "\nEscalating to Opus...\n" in captured.out
 
     @pytest.mark.asyncio
     async def test_escalates_on_max_turns(self):
@@ -265,15 +290,22 @@ class TestRun:
         assert mock_rq.call_count == 1
 
     @pytest.mark.asyncio
-    async def test_escalation_uses_remaining_budget(self):
+    async def test_escalation_call_options(self):
         error_result = MagicMock(
             is_error=True, num_turns=3, total_cost_usd=1.5,
         )
         mock_rq = AsyncMock(side_effect=[error_result, None])
         with patch("python_agent.coding_agent.run_query", mock_rq):
-            await run("task", "/tmp", "claude-sonnet-4-6", 10, 5.0)
-        second_call = mock_rq.call_args_list[1]
-        assert second_call[0][1].max_budget_usd == 3.5
+            await run("task", "/proj", "claude-sonnet-4-6", 10, 5.0)
+        opts = mock_rq.call_args_list[1][0][1]
+        assert opts.model == ESCALATION_MODEL
+        expected_tools = ["Read", "Edit", "Bash", "Glob", "Grep"]
+        assert opts.allowed_tools == expected_tools
+        assert opts.permission_mode == "bypassPermissions"
+        assert opts.max_turns == 10
+        assert opts.max_budget_usd == 3.5
+        assert opts.cwd == "/proj"
+        assert opts.system_prompt is not None
 
 
 class TestParseArgs:
