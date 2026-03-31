@@ -25,6 +25,11 @@ All Python code must meet these standards before commit:
    - Fuzz tests go in `tests/test_fuzz.py`, separate from example-based tests.
    - Use `io.StringIO` for stdout capture in fuzz tests (hypothesis doesn't support pytest's `capsys` fixture).
    - Run: `.venv/bin/pytest tests/test_fuzz.py` or with profile: `--hypothesis-profile=ci`.
+8. **Functional test gap analysis** — final step after all other checks pass
+   - Read every source function and every test. For each function, enumerate all code paths and identify which are not exercised by any test.
+   - Focus on: integration between components, error propagation, boundary conditions, multi-step flows, and real usage edge cases.
+   - Write tests to close the gaps found. Iterate until no meaningful gaps remain.
+   - This step catches what coverage and mutation testing miss: tests that exist but don't verify the right thing, interactions between functions, and untested error paths.
 
 ### Venv
 

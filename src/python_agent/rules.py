@@ -34,7 +34,12 @@ For each task:
    achieve 100% branch coverage.
 5. If tests fail or coverage is incomplete, iterate until both pass.
 6. Run `.venv/bin/mutmut run` on changed modules — kill all mutants.
-7. Commit when all checks pass.
+7. Run `.venv/bin/pytest tests/test_fuzz.py` — all fuzz tests pass.
+8. Analyze every changed function for functional test gaps: enumerate
+   all code paths, check which are untested, and write tests to close
+   gaps. Focus on component interactions, error propagation, boundary
+   conditions, and multi-step flows.
+9. Commit when all checks pass.
 
 Never leave code in a state that fails any check. If you cannot meet
 a standard, stop and report why — do not ship code that violates the rules.
