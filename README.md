@@ -54,6 +54,7 @@ All code produced by these agents (and the agents themselves) must meet:
 3. **100% mutant kill rate** via mutmut v2 (except `if __name__` guard)
 4. **Fuzz testing** via hypothesis on all external-input functions
 5. **Meaningful assertions** on every test
+6. **Functional test gap analysis** as final step — enumerate all code paths, close gaps in integration, error propagation, and boundary conditions
 
 See `CLAUDE.md` for the full rules.
 
