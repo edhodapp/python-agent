@@ -32,11 +32,13 @@ Run against any project directory:
 coding-agent "Add input validation to the parse_config function" -d /path/to/project
 ```
 
-Uses Sonnet by default for cost efficiency. Override with `-m claude-opus-4-6`.
+Uses Sonnet by default for cost efficiency. If Sonnet gets stuck (error
+or hits the turn limit), automatically escalates to Opus using the
+remaining budget. Override the initial model with `-m claude-opus-4-6`.
 
 Options:
 - `-d`, `--project-dir` — target project (default: current dir)
-- `-m`, `--model` — Claude model (default: `claude-sonnet-4-6`)
+- `-m`, `--model` — initial model (default: `claude-sonnet-4-6`)
 - `--max-turns` — agent step limit (default: 30)
 - `--max-budget` — USD spending cap (default: 5.0)
 
@@ -49,8 +51,9 @@ All code produced by these agents (and the agents themselves) must meet:
 
 1. **flake8 clean** with `--max-complexity=5`
 2. **100% branch coverage** via pytest
-3. **100% mutant kill rate** via mutmut v2
-4. **Meaningful assertions** on every test
+3. **100% mutant kill rate** via mutmut v2 (except `if __name__` guard)
+4. **Fuzz testing** via hypothesis on all external-input functions
+5. **Meaningful assertions** on every test
 
 See `CLAUDE.md` for the full rules.
 
@@ -112,8 +115,9 @@ python3 -m venv .venv
 
 # Quality checks
 .venv/bin/flake8 --max-complexity=5 src/ tests/
-.venv/bin/pytest --cov=python_agent --cov-branch --cov-report=term-missing
+.venv/bin/pytest --cov --cov-branch --cov-report=term-missing
 .venv/bin/mutmut run
+.venv/bin/pytest tests/test_fuzz.py --hypothesis-profile=ci
 ```
 
 ## License
