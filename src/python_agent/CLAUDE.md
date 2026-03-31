@@ -9,10 +9,12 @@ All Python code must meet these standards before commit:
 3. **100% branch coverage** — `pytest --cov --cov-branch --cov-report=term-missing`
 4. **pytest** for all tests, **pytest-mock** for mocking
 5. **pyflakes clean** (included in flake8)
-6. **Mutation testing with mutmut** — target 100% kill rate on core modules
+6. **Mutation testing with mutmut** — 100% kill rate required
    - Use mutmut v2 (`pip install 'mutmut<3'`). v3's test mapping doesn't work with non-standard layouts.
    - Configure in `pyproject.toml`: `paths_to_mutate`, `runner` (must use `.venv/bin/python`).
+   - The only acceptable survivors are the `if __name__` guard. Everything else must be killed — no exceptions for "cosmetic" code like help strings or log messages.
    - Surviving mutants = test gaps. Write targeted tests to kill them.
+   - **mutmut wraps mutated strings in `XX...XX`.** To kill string mutants, assert `"XX" not in output` rather than only checking for substrings (which still match inside the wrapped version).
 
 ### Venv
 
