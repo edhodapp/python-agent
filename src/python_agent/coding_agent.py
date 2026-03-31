@@ -31,7 +31,8 @@ async def run_query(task, options):
         if isinstance(message, AssistantMessage):
             print_text_blocks(message)
         elif isinstance(message, ResultMessage):
-            print(f"\nDone. Cost: ${message.total_cost_usd:.4f}")
+            cost = message.total_cost_usd or 0.0
+            print(f"\nDone. Cost: ${cost:.4f}")
             result = message
     return result
 

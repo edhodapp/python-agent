@@ -15,6 +15,16 @@ All Python code must meet these standards before commit:
    - The only acceptable survivors are the `if __name__` guard. Everything else must be killed — no exceptions for "cosmetic" code like help strings or log messages.
    - Surviving mutants = test gaps. Write targeted tests to kill them.
    - **mutmut wraps mutated strings in `XX...XX`.** To kill string mutants, assert `"XX" not in output` rather than only checking for substrings (which still match inside the wrapped version).
+7. **Fuzz testing with hypothesis** — all functions that accept external inputs
+   - External inputs: user CLI args, SDK messages/results, keyboard input, filesystem paths.
+   - Every such function must have a `@given(...)` test verifying:
+     a. **No unhandled exceptions** — any valid-typed input must not crash.
+     b. **Return type contract** — return type matches the function's contract.
+     c. **Invariants** — domain-specific rules (e.g., `remaining_budget <= max_budget`).
+   - Hypothesis profiles in `tests/conftest.py`: `ci` = 200 examples, `dev` = 50.
+   - Fuzz tests go in `tests/test_fuzz.py`, separate from example-based tests.
+   - Use `io.StringIO` for stdout capture in fuzz tests (hypothesis doesn't support pytest's `capsys` fixture).
+   - Run: `.venv/bin/pytest tests/test_fuzz.py` or with profile: `--hypothesis-profile=ci`.
 
 ### Venv
 

@@ -16,6 +16,16 @@ dependencies = [
     "claude-agent-sdk",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "hypothesis",
+    "mutmut<3",
+    "pytest",
+    "pytest-asyncio",
+    "pytest-cov",
+    "pytest-mock",
+]
+
 [project.scripts]
 coding-agent = "python_agent.coding_agent:main"
 planning-agent = "python_agent.planning_agent:main"
