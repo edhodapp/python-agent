@@ -351,6 +351,18 @@ class TestParseArgs:
         args = parse_args(["--max-budget", "2.5", "task"])
         assert args.max_budget == 2.5
 
+    def test_help_text(self, capsys):
+        with pytest.raises(SystemExit):
+            parse_args(["--help"])
+        out = capsys.readouterr().out
+        assert "XX" not in out
+        assert "Run the Python coding agent on a task" in out
+        assert "Task description for the agent" in out
+        assert "Project directory to work in" in out
+        assert "Model to use" in out
+        assert "Maximum agent turns" in out
+        assert "Maximum budget in USD" in out
+
 
 class TestMain:
     """Tests for main()."""
