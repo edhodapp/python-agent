@@ -264,3 +264,176 @@ class TestCodingSystemPrompt:
         result = coding_system_prompt(project_dir)
         assert isinstance(result, str)
         assert project_dir in result
+
+
+# -- Ontology round-trip fuzz tests --
+
+from python_agent.ontology import (  # noqa: E402
+    DAGEdge,
+    DAGNode,
+    Decision,
+    Entity,
+    FunctionSpec as OntFunctionSpec,
+    ModuleSpec as OntModuleSpec,
+    Ontology,
+    OntologyDAG,
+    Property,
+    PropertyType,
+)
+
+
+def st_property_type():
+    """Strategy for PropertyType."""
+    return st.builds(
+        PropertyType,
+        kind=st.sampled_from([
+            "str", "int", "float", "bool", "datetime",
+            "entity_ref", "list", "enum",
+        ]),
+        reference=st.none() | st.text(max_size=20),
+    )
+
+
+def st_property():
+    """Strategy for Property."""
+    return st.builds(
+        Property,
+        name=st.text(min_size=1, max_size=20),
+        property_type=st_property_type(),
+        description=st.text(max_size=50),
+        required=st.booleans(),
+        constraints=st.lists(
+            st.text(max_size=20), max_size=3,
+        ),
+    )
+
+
+def st_entity():
+    """Strategy for Entity."""
+    return st.builds(
+        Entity,
+        id=st.text(min_size=1, max_size=10),
+        name=st.text(min_size=1, max_size=20),
+        description=st.text(max_size=50),
+        properties=st.lists(st_property(), max_size=3),
+    )
+
+
+def st_function_spec():
+    """Strategy for FunctionSpec."""
+    return st.builds(
+        OntFunctionSpec,
+        name=st.text(min_size=1, max_size=20),
+        parameters=st.lists(
+            st.tuples(
+                st.text(min_size=1, max_size=10),
+                st.text(min_size=1, max_size=10),
+            ),
+            max_size=3,
+        ),
+        return_type=st.text(min_size=1, max_size=10),
+        docstring=st.text(max_size=50),
+        preconditions=st.lists(
+            st.text(max_size=20), max_size=2,
+        ),
+        postconditions=st.lists(
+            st.text(max_size=20), max_size=2,
+        ),
+    )
+
+
+def st_ontology():
+    """Strategy for Ontology."""
+    return st.builds(
+        Ontology,
+        entities=st.lists(st_entity(), max_size=2),
+        modules=st.lists(
+            st.builds(
+                OntModuleSpec,
+                name=st.text(min_size=1, max_size=20),
+                responsibility=st.text(max_size=30),
+            ),
+            max_size=2,
+        ),
+    )
+
+
+def st_decision():
+    """Strategy for Decision."""
+    return st.builds(
+        Decision,
+        question=st.text(min_size=1, max_size=50),
+        options=st.lists(
+            st.text(min_size=1, max_size=20),
+            min_size=1, max_size=3,
+        ),
+        chosen=st.text(min_size=1, max_size=20),
+        rationale=st.text(max_size=50),
+    )
+
+
+class TestOntologyRoundTrip:
+    """Fuzz ontology serialization round-trips."""
+
+    @given(pt=st_property_type())
+    def test_property_type(self, pt):
+        assert PropertyType.from_dict(pt.to_dict()) == pt
+
+    @given(p=st_property())
+    def test_property(self, p):
+        assert Property.from_dict(p.to_dict()) == p
+
+    @given(e=st_entity())
+    def test_entity(self, e):
+        assert Entity.from_dict(e.to_dict()) == e
+
+    @given(f=st_function_spec())
+    def test_function_spec(self, f):
+        result = OntFunctionSpec.from_dict(f.to_dict())
+        assert result == f
+
+    @given(o=st_ontology())
+    def test_ontology(self, o):
+        assert Ontology.from_dict(o.to_dict()) == o
+
+    @given(d=st_decision())
+    def test_decision(self, d):
+        assert Decision.from_dict(d.to_dict()) == d
+
+    @given(
+        o=st_ontology(),
+        label=st.text(max_size=20),
+    )
+    def test_dag_node(self, o, label):
+        node = DAGNode(
+            id="n1",
+            ontology=o,
+            created_at="2026-01-01T00:00:00Z",
+            label=label,
+        )
+        assert DAGNode.from_dict(node.to_dict()) == node
+
+    @given(d=st_decision())
+    def test_dag_edge(self, d):
+        edge = DAGEdge(
+            parent_id="p",
+            child_id="c",
+            decision=d,
+            created_at="2026-01-01T00:00:00Z",
+        )
+        assert DAGEdge.from_dict(edge.to_dict()) == edge
+
+    @given(o=st_ontology())
+    def test_ontology_dag_json(self, o):
+        node = DAGNode(
+            id="n1",
+            ontology=o,
+            created_at="2026-01-01T00:00:00Z",
+        )
+        dag = OntologyDAG(
+            project_name="test",
+            nodes=[node],
+            current_node_id="n1",
+        )
+        restored = OntologyDAG.from_json(dag.to_json())
+        assert restored == dag
