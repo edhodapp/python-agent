@@ -29,6 +29,7 @@ dev = [
 [project.scripts]
 coding-agent = "python_agent.coding_agent:main"
 planning-agent = "python_agent.planning_agent:main"
+discovery-agent = "python_agent.discovery_agent:main"
 
 [project.urls]
 Homepage = "https://github.com/edhodapp/python-agent"
