@@ -2,8 +2,11 @@
 
 from python_agent.rules import (
     coding_system_prompt,
+    discovery_system_prompt,
+    divergence_system_prompt,
     load_rules,
     planning_system_prompt,
+    strategy_system_prompt,
 )
 
 
@@ -84,3 +87,51 @@ class TestPlanningSystemPrompt:
     def test_says_do_not_write_code(self):
         result = planning_system_prompt()
         assert "Do not write code" in result
+
+
+class TestDiscoverySystemPrompt:
+    """Tests for discovery_system_prompt()."""
+
+    def test_includes_discovery_role(self):
+        result = discovery_system_prompt()
+        assert "Discovery Agent" in result
+
+    def test_includes_ontology_format(self):
+        result = discovery_system_prompt()
+        assert "```ontology" in result
+
+    def test_includes_rules(self):
+        result = discovery_system_prompt()
+        assert "## Python Standards" in result
+
+
+class TestStrategySystemPrompt:
+    """Tests for strategy_system_prompt()."""
+
+    def test_includes_ontology(self):
+        result = strategy_system_prompt('{"x": 1}', 3)
+        assert '{"x": 1}' in result
+
+    def test_includes_num_candidates(self):
+        result = strategy_system_prompt("{}", 5)
+        assert "5" in result
+
+    def test_includes_strategies_format(self):
+        result = strategy_system_prompt("{}", 3)
+        assert "```strategies" in result
+
+
+class TestDivergenceSystemPrompt:
+    """Tests for divergence_system_prompt()."""
+
+    def test_includes_ontology(self):
+        result = divergence_system_prompt('{"x": 1}', "s")
+        assert '{"x": 1}' in result
+
+    def test_includes_strategy(self):
+        result = divergence_system_prompt("{}", "my strat")
+        assert "my strat" in result
+
+    def test_includes_ontology_format(self):
+        result = divergence_system_prompt("{}", "s")
+        assert "```ontology" in result

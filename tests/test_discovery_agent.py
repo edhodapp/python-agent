@@ -6,6 +6,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from claude_agent_sdk import TextBlock
 
+from python_agent.dag_utils import (
+    load_dag,
+    save_dag,
+    save_snapshot,
+)
 from python_agent.discovery_agent import (
     _handle_back,
     _handle_save,
@@ -16,7 +21,6 @@ from python_agent.discovery_agent import (
     format_ontology_summary,
     handle_command,
     is_command,
-    load_dag,
     main,
     merge_ontology_update,
     parse_args,
@@ -24,8 +28,6 @@ from python_agent.discovery_agent import (
     process_response,
     read_user_input,
     run,
-    save_dag,
-    save_snapshot,
 )
 from python_agent.ontology import (
     DAGEdge,

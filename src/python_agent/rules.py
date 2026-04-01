@@ -154,3 +154,86 @@ Rules for ontology blocks:
 - Summarize what you understood before proposing ontology updates.
 - When the user says "show", the host displays the current ontology.
 """
+
+
+def strategy_system_prompt(ontology_json, num_candidates):
+    """Build the prompt for identifying architectural strategies."""
+    return f"""You are a software architect analyzing a problem domain.
+
+## Problem Domain Ontology
+
+```json
+{ontology_json}
+```
+
+## Your Task
+
+Identify {num_candidates} meaningfully different architectural
+approaches to build software for this domain. Each approach should
+represent a distinct position on a key design decision where
+reasonable architects would disagree.
+
+## Output Format
+
+Output EXACTLY ONE fenced code block tagged `strategies`:
+
+```strategies
+[
+  {{
+    "label": "short-name",
+    "strategy": "2-3 sentence description of this approach",
+    "question": "the key design question this answers",
+    "options": ["option-a", "option-b"],
+    "chosen": "which option this approach picks"
+  }}
+]
+```
+
+Rules:
+- Each strategy must be structurally different, not cosmetic.
+- Labels should be short and descriptive (e.g., "monolith-sqlite").
+- The question/options/chosen fields form a decision record.
+"""
+
+
+def divergence_system_prompt(ontology_json, strategy):
+    """Build the prompt for generating one solution candidate."""
+    return f"""You are a software architect generating a solution.
+
+## Problem Domain Ontology
+
+```json
+{ontology_json}
+```
+
+## Strategy
+
+{strategy}
+
+## Your Task
+
+Generate a complete solution architecture following the strategy
+above. Fill in the solution domain: modules, data models, and
+external dependencies.
+
+## Output Format
+
+Output EXACTLY ONE fenced code block tagged `ontology` containing
+the COMPLETE ontology JSON (both problem and solution domains):
+
+```ontology
+{{... complete ontology JSON ...}}
+```
+
+Rules:
+- Preserve ALL problem domain items (entities, relationships,
+  domain_constraints) exactly as given.
+- Fill in ALL solution domain sections: modules (with classes,
+  methods, functions, dependencies, test_strategy), data_models,
+  external_dependencies.
+- Resolve open questions your architecture addresses (set
+  resolved=true with a resolution string).
+- Be specific: name real Python packages, specify class/function
+  signatures with parameter types.
+- Every module must have a test_strategy.
+"""

@@ -5,7 +5,6 @@ import asyncio
 import json
 import re
 import sys
-from datetime import datetime, timezone
 
 from claude_agent_sdk import (
     AssistantMessage,
@@ -14,14 +13,15 @@ from claude_agent_sdk import (
     TextBlock,
 )
 
+from python_agent.dag_utils import (
+    load_dag,
+    save_dag,
+    save_snapshot,
+)
 from python_agent.ontology import (
-    DAGEdge,
-    DAGNode,
-    Decision,
     DomainConstraint,
     Entity,
     Ontology,
-    OntologyDAG,
     OpenQuestion,
     Relationship,
 )
@@ -183,62 +183,6 @@ def format_ontology_summary(ontology):
         lines.append(f"  {c.name}: {c.description}")
     lines += _format_questions(ontology)
     return "\n".join(lines)
-
-
-def load_dag(path, project_name):
-    """Load an OntologyDAG from a JSON file.
-
-    Returns a new empty DAG if the file does not exist.
-    """
-    try:
-        with open(path) as f:
-            return OntologyDAG.from_json(f.read())
-    except FileNotFoundError:
-        return OntologyDAG(project_name=project_name)
-
-
-def save_dag(dag, path):
-    """Save an OntologyDAG to a JSON file."""
-    with open(path, "w") as f:
-        f.write(dag.to_json())
-
-
-def _make_node_id():
-    """Generate a unique node ID from current timestamp."""
-    now = datetime.now(timezone.utc)
-    return now.strftime("%Y%m%dT%H%M%S")
-
-
-def save_snapshot(dag, ontology, label):
-    """Create a new DAG node from the current ontology.
-
-    Links it as a child of the current node if one exists.
-    Returns the new node id.
-    """
-    now = datetime.now(timezone.utc).isoformat()
-    node_id = _make_node_id()
-    node = DAGNode(
-        id=node_id,
-        ontology=Ontology.from_dict(ontology.to_dict()),
-        created_at=now,
-        label=label,
-    )
-    dag.nodes.append(node)
-    if dag.current_node_id:
-        edge = DAGEdge(
-            parent_id=dag.current_node_id,
-            child_id=node_id,
-            decision=Decision(
-                question="save",
-                options=["continue"],
-                chosen="continue",
-                rationale=label,
-            ),
-            created_at=now,
-        )
-        dag.edges.append(edge)
-    dag.current_node_id = node_id
-    return node_id
 
 
 def backtrack(dag):
