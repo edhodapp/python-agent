@@ -1,7 +1,11 @@
 # python-agent
 
-[![CI](https://github.com/edhodapp/python-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/edhodapp/python-agent/actions/workflows/ci.yml)
-[![Slow CI](https://github.com/edhodapp/python-agent/actions/workflows/slow-ci.yml/badge.svg)](https://github.com/edhodapp/python-agent/actions/workflows/slow-ci.yml)
+[![Lint](https://github.com/edhodapp/python-agent/actions/workflows/lint.yml/badge.svg)](https://github.com/edhodapp/python-agent/actions/workflows/lint.yml)
+[![Type Check](https://github.com/edhodapp/python-agent/actions/workflows/typecheck.yml/badge.svg)](https://github.com/edhodapp/python-agent/actions/workflows/typecheck.yml)
+[![Test](https://github.com/edhodapp/python-agent/actions/workflows/test.yml/badge.svg)](https://github.com/edhodapp/python-agent/actions/workflows/test.yml)
+[![Taint Analysis](https://github.com/edhodapp/python-agent/actions/workflows/taint.yml/badge.svg)](https://github.com/edhodapp/python-agent/actions/workflows/taint.yml)
+[![Fuzz](https://github.com/edhodapp/python-agent/actions/workflows/fuzz.yml/badge.svg)](https://github.com/edhodapp/python-agent/actions/workflows/fuzz.yml)
+[![Mutation](https://github.com/edhodapp/python-agent/actions/workflows/mutation.yml/badge.svg)](https://github.com/edhodapp/python-agent/actions/workflows/mutation.yml)
 
 Claude-powered Python agents with ontology-driven project planning,
 autonomous code generation, and defense-in-depth security hardening.
