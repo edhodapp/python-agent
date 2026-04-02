@@ -361,7 +361,7 @@ class TestParseFile:
         """)
         p = tmp_path / "mod.py"
         p.write_text(src)
-        funcs, edges = parse_file(str(p), "mod")
+        funcs, edges, _ = parse_file(str(p), "mod")
         names = {f.name for f in funcs}
         assert "mod.load_data" in names
         assert "mod.process" in names
@@ -381,7 +381,7 @@ class TestParseFile:
         """)
         p = tmp_path / "amod.py"
         p.write_text(src)
-        funcs, edges = parse_file(str(p), "amod")
+        funcs, edges, _ = parse_file(str(p), "amod")
         assert len(funcs) == 1
         assert funcs[0].is_source is True
 
@@ -395,7 +395,7 @@ class TestParseFile:
         """)
         p = tmp_path / "e.py"
         p.write_text(src)
-        funcs, edges = parse_file(str(p), "e")
+        funcs, edges, _ = parse_file(str(p), "e")
         assert len(edges) == 1
         assert edges[0].caller == "e.caller"
         assert edges[0].callee == "e.callee"
@@ -952,7 +952,7 @@ class TestFunctionVisitor:
         """)
         p = tmp_path / "v.py"
         p.write_text(src)
-        funcs, _ = parse_file(str(p), "v")
+        funcs, _, _ = parse_file(str(p), "v")
         assert funcs[0].is_sanitizer is True
 
     def test_non_sanitizer(self, tmp_path: Any) -> None:
@@ -962,7 +962,7 @@ class TestFunctionVisitor:
         """)
         p = tmp_path / "v.py"
         p.write_text(src)
-        funcs, _ = parse_file(str(p), "v")
+        funcs, _, _ = parse_file(str(p), "v")
         assert funcs[0].is_sanitizer is False
 
 
@@ -981,7 +981,7 @@ class TestCallVisitorModuleLevel:
         """)
         p = tmp_path / "ml.py"
         p.write_text(src)
-        _, edges = parse_file(str(p), "ml")
+        _, edges, _ = parse_file(str(p), "ml")
         # Only edge should be foo -> bar
         assert len(edges) == 1
         assert edges[0].caller == "ml.foo"
@@ -1013,7 +1013,7 @@ class TestUnresolvableCallInFunction:
         """)
         p = tmp_path / "ur.py"
         p.write_text(src)
-        _, edges = parse_file(str(p), "ur")
+        _, edges, _ = parse_file(str(p), "ur")
         # handlers[0]() is a Subscript call — can't resolve name
         assert edges == []
 

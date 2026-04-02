@@ -43,6 +43,7 @@ def read_user_input() -> str | None:
     return user_input
 
 
+# taint: ignore[CWE-200] -- Interactive agent displays LLM output to user
 async def run(initial_prompt: str, model: str) -> None:
     """Run the planning agent interactively."""
     prompt = planning_system_prompt()

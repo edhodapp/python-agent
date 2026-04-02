@@ -6,11 +6,16 @@ import argparse
 import ast
 import json
 import os
+import re
 import sys
 from collections import defaultdict
 from typing import Optional
 
 from pydantic import BaseModel
+
+_SUPPRESS_RE = re.compile(
+    r"#\s*taint:\s*ignore\[([A-Z]+-\d+)\]\s*--\s*(.+)",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -38,6 +43,15 @@ class CallEdge(BaseModel):
     lineno: int
 
 
+class Suppression(BaseModel):
+    """A user-acknowledged taint suppression."""
+
+    function: str
+    cwe: str
+    reason: str
+    lineno: int
+
+
 class TaintPath(BaseModel):
     """A path from a taint source to a taint sink."""
 
@@ -46,6 +60,8 @@ class TaintPath(BaseModel):
     path: list[str]
     cwe: str
     sanitized: bool
+    suppressed: bool = False
+    suppression_reason: str = ""
 
 
 class CallGraph(BaseModel):
@@ -53,6 +69,7 @@ class CallGraph(BaseModel):
 
     functions: dict[str, FunctionInfo] = {}
     edges: list[CallEdge] = []
+    suppressions: list[Suppression] = []
 
 
 # ---------------------------------------------------------------------------
@@ -324,10 +341,66 @@ def _collect_python_files(root: str) -> list[str]:
     return result
 
 
+def _collect_suppressions(
+    source: str, module_name: str,
+) -> list[Suppression]:
+    """Scan source for taint suppression comments.
+
+    Format: # taint: ignore[CWE-200] -- reason text
+    Can appear on a def line or the line immediately before.
+    """
+    lines = source.splitlines()
+    results: list[Suppression] = []
+    for i, line in enumerate(lines):
+        match = _SUPPRESS_RE.search(line)
+        if match is None:
+            continue
+        cwe = match.group(1)
+        reason = match.group(2).strip()
+        func_name = _find_func_for_suppress(lines, i)
+        if func_name:
+            fqn = f"{module_name}.{func_name}"
+            results.append(Suppression(
+                function=fqn, cwe=cwe,
+                reason=reason, lineno=i + 1,
+            ))
+    return results
+
+
+def _find_func_for_suppress(
+    lines: list[str], comment_idx: int,
+) -> str:
+    """Find the function name for a suppression comment.
+
+    Checks the comment line itself and the next line.
+    """
+    name = _extract_func_name(lines[comment_idx])
+    if name:
+        return name
+    if comment_idx + 1 < len(lines):
+        return _extract_func_name(lines[comment_idx + 1])
+    return ""
+
+
+def _extract_func_name(line: str) -> str:
+    """Extract function name from a def line."""
+    stripped = line.strip()
+    for prefix in ("async def ", "def "):
+        if stripped.startswith(prefix):
+            rest = stripped[len(prefix):]
+            paren = rest.find("(")
+            if paren > 0:
+                return rest[:paren]
+    return ""
+
+
 def parse_file(
     path: str, module_name: str,
-) -> tuple[list[FunctionInfo], list[CallEdge]]:
-    """Parse a single .py file and return functions + edges."""
+) -> tuple[
+    list[FunctionInfo], list[CallEdge],
+    list[Suppression],
+]:
+    """Parse a .py file. Return functions, edges, suppressions."""
     with open(path) as fh:
         source = fh.read()
     tree = ast.parse(source, filename=path)
@@ -336,18 +409,20 @@ def parse_file(
     fv.visit(tree)
     cv = _CallVisitor(module_name, imports)
     cv.visit(tree)
-    return fv.functions, cv.edges
+    supps = _collect_suppressions(source, module_name)
+    return fv.functions, cv.edges, supps
 
 
 def build_graph(root_dir: str) -> CallGraph:
-    """Build a CallGraph by scanning all .py files under *root_dir*."""
+    """Build a CallGraph by scanning all .py files."""
     graph = CallGraph()
     for path in _collect_python_files(root_dir):
         mod = _module_name_from_path(path, root_dir)
-        funcs, edges = parse_file(path, mod)
+        funcs, edges, supps = parse_file(path, mod)
         for f in funcs:
             graph.functions[f.name] = f
         graph.edges.extend(edges)
+        graph.suppressions.extend(supps)
     return graph
 
 
@@ -462,6 +537,20 @@ def _path_has_sanitizer(
     return False
 
 
+def _check_suppressed(
+    path: list[str], cwe: str,
+    suppressions: list[Suppression],
+) -> tuple[bool, str]:
+    """Check if any function on path has a suppression.
+
+    Returns (suppressed, reason).
+    """
+    for s in suppressions:
+        if s.cwe == cwe and s.function in path:
+            return (True, s.reason)
+    return (False, "")
+
+
 def find_taint_paths(graph: CallGraph) -> list[TaintPath]:
     """Find all source-to-sink taint paths in the graph."""
     forward = _build_forward_adj(graph)
@@ -472,12 +561,17 @@ def find_taint_paths(graph: CallGraph) -> list[TaintPath]:
         hits = _bfs_to_sinks(src, forward, sinks, graph)
         for sink_name, path, cwe in hits:
             sanitized = _path_has_sanitizer(path, graph)
+            suppressed, reason = _check_suppressed(
+                path, cwe, graph.suppressions,
+            )
             results.append(TaintPath(
                 source=src,
                 sink=sink_name,
                 path=path,
                 cwe=cwe,
                 sanitized=sanitized,
+                suppressed=suppressed,
+                suppression_reason=reason,
             ))
     return results
 
@@ -486,6 +580,17 @@ def find_taint_paths(graph: CallGraph) -> list[TaintPath]:
 # Reporting
 # ---------------------------------------------------------------------------
 
+def _should_skip(
+    tp: TaintPath, include_sanitized: bool,
+) -> bool:
+    """Check if a path should be skipped in output."""
+    if tp.suppressed:
+        return True
+    if tp.sanitized and not include_sanitized:
+        return True
+    return False
+
+
 def format_text_report(
     paths: list[TaintPath],
     include_sanitized: bool = False,
@@ -493,7 +598,7 @@ def format_text_report(
     """Format taint paths as a human-readable text report."""
     lines: list[str] = []
     for tp in paths:
-        if tp.sanitized and not include_sanitized:
+        if _should_skip(tp, include_sanitized):
             continue
         status = " [SANITIZED]" if tp.sanitized else ""
         chain = " -> ".join(tp.path)
@@ -534,7 +639,7 @@ def format_sarif(
     """Format taint paths as a SARIF JSON structure."""
     filtered = [
         p for p in paths
-        if include_sanitized or not p.sanitized
+        if not _should_skip(p, include_sanitized)
     ]
     results = [_sarif_result(p) for p in filtered]
     return {

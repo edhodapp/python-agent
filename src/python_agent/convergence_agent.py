@@ -281,6 +281,7 @@ def _print_status(
     print(format_children_list(children))
 
 
+# taint: ignore[CWE-200] -- Interactive agent displays LLM output to user
 async def _main_loop(
     client: Any, state: AgentState,
     dag: OntologyDAG, dag_path: str,

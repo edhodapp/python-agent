@@ -310,6 +310,7 @@ def _init_ontology(dag: OntologyDAG) -> Ontology:
     return node.ontology.model_copy(deep=True)
 
 
+# taint: ignore[CWE-200] -- Interactive agent displays LLM output to user
 async def run(
     description: str, model: str, dag_path: str,
 ) -> None:
