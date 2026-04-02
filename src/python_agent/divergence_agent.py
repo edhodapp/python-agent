@@ -103,11 +103,14 @@ def build_decision(
     strategy: dict[str, Any],
 ) -> Decision:
     """Create a Decision from a strategy dict."""
+    options = strategy.get("options", [])
+    if not isinstance(options, list):
+        options = []
     return Decision(
-        question=strategy.get("question", "architecture"),
-        options=strategy.get("options", []),
-        chosen=strategy.get("chosen", ""),
-        rationale=strategy.get("strategy", ""),
+        question=str(strategy.get("question", "architecture")),
+        options=options,
+        chosen=str(strategy.get("chosen", "")),
+        rationale=str(strategy.get("strategy", "")),
     )
 
 
