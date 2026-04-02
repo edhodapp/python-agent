@@ -35,6 +35,7 @@ planning-agent = "python_agent.planning_agent:main"
 discovery-agent = "python_agent.discovery_agent:main"
 divergence-agent = "python_agent.divergence_agent:main"
 convergence-agent = "python_agent.convergence_agent:main"
+call-graph = "python_agent.call_graph:main"
 
 [project.urls]
 Homepage = "https://github.com/edhodapp/python-agent"
