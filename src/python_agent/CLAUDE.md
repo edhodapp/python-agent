@@ -25,7 +25,14 @@ All Python code must meet these standards before commit:
    - Fuzz tests go in `tests/test_fuzz.py`, separate from example-based tests.
    - Use `io.StringIO` for stdout capture in fuzz tests (hypothesis doesn't support pytest's `capsys` fixture).
    - Run: `.venv/bin/pytest tests/test_fuzz.py` or with profile: `--hypothesis-profile=ci`.
-8. **Functional test gap analysis** — final step after all other checks pass
+8. **mypy --strict** — zero errors
+   - Run: `.venv/bin/mypy --strict src/`
+   - All function signatures must have type annotations (parameters and return types).
+   - Use `Annotated` types from `python_agent.types` for constrained strings.
+   - Use `Literal` types for enum-like fields (not plain `str`).
+   - Use Pydantic `BaseModel` for data structures (not dataclasses).
+   - Add `# type: ignore[<code>]` with specific error codes only for third-party libraries without stubs.
+9. **Functional test gap analysis** — final step after all other checks pass
    - Read every source function and every test. For each function, enumerate all code paths and identify which are not exercised by any test.
    - Focus on: integration between components, error propagation, boundary conditions, multi-step flows, and real usage edge cases.
    - Write tests to close the gaps found. Iterate until no meaningful gaps remain.
@@ -40,6 +47,7 @@ Always use the project venv. Execute Python through `.venv/bin/python3`,
 
 ```bash
 .venv/bin/flake8 --max-complexity=5
+.venv/bin/mypy --strict src/
 .venv/bin/pytest --cov --cov-branch --cov-report=term-missing
 ```
 

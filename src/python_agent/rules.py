@@ -39,22 +39,23 @@ For each task:
 1. Read existing code to understand context before changing anything.
 2. Write or modify code to implement the task.
 3. Run `.venv/bin/flake8 --max-complexity=5` — fix all warnings.
-4. Run `.venv/bin/pytest --cov --cov-branch --cov-report=term-missing` —
+4. Run `.venv/bin/mypy --strict src/` — fix all type errors.
+5. Run `.venv/bin/pytest --cov --cov-branch --cov-report=term-missing` —
    achieve 100% branch coverage.
-5. If tests fail or coverage is incomplete, iterate until both pass.
-6. Run `.venv/bin/mutmut run` on changed modules — kill all mutants.
-7. Run `.venv/bin/pytest tests/test_fuzz.py` — all fuzz tests pass.
-8. Analyze every changed function for functional test gaps: enumerate
+6. If tests fail or coverage is incomplete, iterate until both pass.
+7. Run `.venv/bin/mutmut run` on changed modules — kill all mutants.
+8. Run `.venv/bin/pytest tests/test_fuzz.py` — all fuzz tests pass.
+9. Analyze every changed function for functional test gaps: enumerate
    all code paths, check which are untested, and write tests to close
    gaps. Focus on component interactions, error propagation, boundary
    conditions, and multi-step flows.
-9. Commit when all checks pass.
+10. Commit when all checks pass.
 
 Never leave code in a state that fails any check. If you cannot meet
 a standard, stop and report why — do not ship code that violates the rules.
 
 WARNING REQUIREMENT: If you run out of turns or budget before completing
-step 8 (functional test gap analysis), you MUST print the following as
+step 9 (functional test gap analysis), you MUST print the following as
 your final output:
   WARNING: Functional test gap analysis did not complete.
   Remaining gaps: <list the gaps you identified but did not close>
