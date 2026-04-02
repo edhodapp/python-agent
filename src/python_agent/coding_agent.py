@@ -16,6 +16,7 @@ from claude_agent_sdk import (
 )
 
 from python_agent.rules import coding_system_prompt
+from python_agent.tool_guard import make_tool_guard
 
 ESCALATION_MODEL = "claude-opus-4-6"
 
@@ -72,6 +73,7 @@ async def run(
 ) -> None:
     """Run the coding agent on a task, escalating to Opus if stuck."""
     prompt = coding_system_prompt(project_dir)
+    guard = make_tool_guard(project_dir)
     options = ClaudeAgentOptions(
         model=model,
         system_prompt=prompt,
@@ -80,6 +82,7 @@ async def run(
         max_turns=max_turns,
         max_budget_usd=max_budget,
         cwd=project_dir,
+        can_use_tool=guard,
     )
     result = await run_query(task, options)
     if model == ESCALATION_MODEL:
@@ -100,6 +103,7 @@ async def run(
         max_turns=max_turns,
         max_budget_usd=budget,
         cwd=project_dir,
+        can_use_tool=guard,
     )
     await run_query(escalation_task, escalation_options)
 

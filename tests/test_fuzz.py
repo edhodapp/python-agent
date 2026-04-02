@@ -592,3 +592,38 @@ class TestComputeHashFuzz:
         result = compute_hash(data, key)
         assert isinstance(result, str)
         assert len(result) == 64
+
+
+# -- Tool guard fuzz tests --
+
+from python_agent.tool_guard import (  # noqa: E402
+    is_safe_bash,
+    is_safe_path,
+)
+
+
+class TestIsSafeBashFuzz:
+    """Fuzz is_safe_bash."""
+
+    @given(command=st.text(max_size=200))
+    def test_never_crashes(self, command):
+        safe, reason = is_safe_bash(command, "/tmp/proj")
+        assert isinstance(safe, bool)
+        assert isinstance(reason, str)
+
+
+class TestIsSafePathFuzz:
+    """Fuzz is_safe_path."""
+
+    @given(
+        tool=st.sampled_from([
+            "Read", "Edit", "Glob", "Grep", "Bash",
+        ]),
+        path=st.text(max_size=200),
+    )
+    def test_never_crashes(self, tool, path):
+        safe, reason = is_safe_path(
+            tool, {"file_path": path}, "/tmp/proj",
+        )
+        assert isinstance(safe, bool)
+        assert isinstance(reason, str)
