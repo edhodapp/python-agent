@@ -398,7 +398,7 @@ class TestHandleSave:
 class TestHandleBack:
     """Tests for _handle_back."""
 
-    def test_restores_ontology(self):
+    def test_restores_ontology(self, tmp_path):
         root_ontology = Ontology(
             entities=[Entity(id="e1", name="Root")],
         )
@@ -431,7 +431,7 @@ class TestHandleBack:
             current_node_id="child",
         )
         o = Ontology()
-        _handle_back(o, dag, "/dev/null")
+        _handle_back(o, dag, str(tmp_path / "dag.json"))
         assert len(o.entities) == 1
         assert o.entities[0].name == "Root"
 

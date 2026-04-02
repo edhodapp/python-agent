@@ -198,16 +198,16 @@ def maybe_process(text, state):
 
 def build_query(user_input, state, dag):
     """Build LLM query with current context."""
+    from python_agent.rules import frame_data
     children = get_children_summaries(
         dag, dag.current_node_id,
     )
     ctx = format_children_list(children)
     node = dag.get_current_node()
     label = node.label if node else "unknown"
-    return (
-        f"[Context: node={label}, "
-        f"children:\n{ctx}]\n\n{user_input}"
-    )
+    context = f"node={label}, children:\n{ctx}"
+    framed = frame_data("context-data", context)
+    return f"[Context: {framed}]\n\n{user_input}"
 
 
 def _init_state(dag):

@@ -107,3 +107,123 @@ class TestSaveSnapshot:
         save_snapshot(dag, o, "snap")
         o.entities[0] = Entity(id="e1", name="Changed")
         assert dag.nodes[0].ontology.entities[0].name == "X"
+
+
+class TestSaveDagSigning:
+    """Tests for signing on save."""
+
+    def test_signs_unsigned_nodes(self, tmp_path):
+        path = str(tmp_path / "dag.json")
+        dag = OntologyDAG(project_name="p")
+        save_snapshot(dag, Ontology(), "test")
+        assert dag.nodes[0].integrity_hash == ""
+        save_dag(dag, path)
+        assert dag.nodes[0].integrity_hash != ""
+
+    def test_preserves_existing_hash(self, tmp_path):
+        path = str(tmp_path / "dag.json")
+        dag = OntologyDAG(project_name="p")
+        save_snapshot(dag, Ontology(), "test")
+        save_dag(dag, path)
+        original_hash = dag.nodes[0].integrity_hash
+        save_dag(dag, path)
+        assert dag.nodes[0].integrity_hash == original_hash
+
+
+class TestLoadDagVerification:
+    """Tests for verification on load."""
+
+    def test_valid_dag_loads_clean(self, tmp_path):
+        import warnings
+        path = str(tmp_path / "dag.json")
+        dag = OntologyDAG(project_name="p")
+        save_snapshot(dag, Ontology(), "test")
+        save_dag(dag, path)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            loaded = load_dag(path, "x")
+            dag_warns = [
+                x for x in w
+                if "integrity" in str(x.message).lower()
+            ]
+            assert len(dag_warns) == 0
+        assert loaded.project_name == "p"
+
+    def test_tampered_dag_warns(self, tmp_path):
+        import json
+        import warnings
+        path = str(tmp_path / "dag.json")
+        dag = OntologyDAG(project_name="p")
+        save_snapshot(
+            dag, Ontology(
+                entities=[Entity(id="e1", name="X")],
+            ), "test",
+        )
+        save_dag(dag, path)
+        with open(path) as f:
+            raw = json.load(f)
+        raw["nodes"][0]["ontology"]["entities"] = [
+            {"id": "e1", "name": "TAMPERED"},
+        ]
+        with open(path, "w") as f:
+            json.dump(raw, f)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            load_dag(path, "x")
+            dag_warns = [
+                x for x in w
+                if "integrity" in str(x.message).lower()
+            ]
+            assert len(dag_warns) == 1
+
+    def test_key_error_skips_verify(self, tmp_path):
+        from unittest.mock import patch
+        import warnings
+        path = str(tmp_path / "dag.json")
+        dag = OntologyDAG(project_name="p")
+        save_snapshot(dag, Ontology(), "test")
+        save_dag(dag, path)
+        with (
+            patch(
+                "python_agent.dag_utils.load_or_create_key",
+                side_effect=OSError("no key"),
+            ),
+            warnings.catch_warnings(record=True) as w,
+        ):
+            warnings.simplefilter("always")
+            load_dag(path, "x")
+            dag_warns = [
+                x for x in w
+                if "integrity" in str(
+                    x.message,
+                ).lower()
+            ]
+            assert len(dag_warns) == 0
+
+
+class TestLoadDagValidation:
+    """Tests for validation on load."""
+
+    def test_invalid_entity_warns(self, tmp_path):
+        import json
+        import warnings
+        path = str(tmp_path / "dag.json")
+        dag = OntologyDAG(project_name="p")
+        save_snapshot(dag, Ontology(), "test")
+        save_dag(dag, path)
+        with open(path) as f:
+            raw = json.load(f)
+        raw["nodes"][0]["ontology"]["entities"] = [
+            {"id": "has spaces!", "name": "Bad"},
+        ]
+        raw["nodes"][0]["integrity_hash"] = ""
+        with open(path, "w") as f:
+            json.dump(raw, f)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            load_dag(path, "x")
+            val_warns = [
+                x for x in w
+                if "validation" in str(x.message).lower()
+            ]
+            assert len(val_warns) == 1

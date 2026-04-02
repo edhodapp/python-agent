@@ -1,7 +1,34 @@
 """Ontology schema and DAG for project planning."""
 
 import json
+import re
 from dataclasses import dataclass, field
+
+# -- Validation constants --
+
+VALID_PROPERTY_KINDS = frozenset({
+    "str", "int", "float", "bool", "datetime",
+    "entity_ref", "list", "enum",
+})
+
+VALID_CARDINALITIES = frozenset({
+    "one_to_one", "one_to_many",
+    "many_to_one", "many_to_many",
+})
+
+VALID_MODULE_STATUSES = frozenset({
+    "not_started", "in_progress", "complete",
+})
+
+VALID_PRIORITIES = frozenset({
+    "low", "medium", "high",
+})
+
+SAFE_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
+
+MAX_NAME_LENGTH = 100
+MAX_DESCRIPTION_LENGTH = 2000
+MAX_ID_LENGTH = 100
 
 
 def _list_to_dicts(items):
@@ -526,6 +553,7 @@ class DAGNode:
     ontology: Ontology
     created_at: str
     label: str = ""
+    integrity_hash: str = ""
 
     def to_dict(self):
         """Serialize to dict."""
@@ -534,6 +562,7 @@ class DAGNode:
             "ontology": self.ontology.to_dict(),
             "created_at": self.created_at,
             "label": self.label,
+            "integrity_hash": self.integrity_hash,
         }
 
     @classmethod
@@ -544,6 +573,9 @@ class DAGNode:
             ontology=Ontology.from_dict(data["ontology"]),
             created_at=data["created_at"],
             label=data.get("label", ""),
+            integrity_hash=data.get(
+                "integrity_hash", "",
+            ),
         )
 
 
@@ -639,3 +671,120 @@ class OntologyDAG:
     def from_json(cls, text):
         """Deserialize from JSON string."""
         return cls.from_dict(json.loads(text))
+
+
+# -- Validation --
+
+
+def _validate_id(entity_id):
+    """Validate an ID string. Returns list of errors."""
+    errors = []
+    if len(entity_id) > MAX_ID_LENGTH:
+        errors.append(f"ID too long: {len(entity_id)}")
+    if not SAFE_ID_PATTERN.match(entity_id):
+        errors.append(f"ID has invalid chars: {entity_id!r}")
+    return errors
+
+
+def _validate_entity_properties(data):
+    """Validate properties within an Entity dict."""
+    errors = []
+    for p in data.get("properties", []):
+        pt = p.get("property_type", {})
+        kind = pt.get("kind", "")
+        if kind and kind not in VALID_PROPERTY_KINDS:
+            errors.append(
+                f"Invalid property kind: {kind!r}",
+            )
+    return errors
+
+
+def _validate_string_length(value, label, max_len):
+    """Validate a string field length."""
+    if len(value) > max_len:
+        return [f"{label} too long"]
+    return []
+
+
+def _validate_entity(data):
+    """Validate an Entity dict. Returns list of errors."""
+    errors = []
+    for field_name in ("id", "name"):
+        if field_name not in data:
+            errors.append(f"Entity missing '{field_name}'")
+    if "id" in data:
+        errors += _validate_id(data["id"])
+    if "name" in data:
+        errors += _validate_string_length(
+            data["name"], "Entity name", MAX_NAME_LENGTH,
+        )
+    errors += _validate_string_length(
+        data.get("description", ""),
+        "Entity description", MAX_DESCRIPTION_LENGTH,
+    )
+    errors += _validate_entity_properties(data)
+    return errors
+
+
+def _validate_relationship(data):
+    """Validate a Relationship dict."""
+    errors = []
+    for field_name in (
+        "source_entity_id", "target_entity_id",
+        "name", "cardinality",
+    ):
+        if field_name not in data:
+            errors.append(
+                f"Relationship missing '{field_name}'",
+            )
+    card = data.get("cardinality", "")
+    if card and card not in VALID_CARDINALITIES:
+        errors.append(f"Invalid cardinality: {card!r}")
+    return errors
+
+
+def _validate_module(data):
+    """Validate a ModuleSpec dict."""
+    errors = []
+    for field_name in ("name", "responsibility"):
+        if field_name not in data:
+            errors.append(
+                f"ModuleSpec missing '{field_name}'",
+            )
+    status = data.get("status", "not_started")
+    if status not in VALID_MODULE_STATUSES:
+        errors.append(f"Invalid status: {status!r}")
+    return errors
+
+
+def _validate_open_question(data):
+    """Validate an OpenQuestion dict."""
+    errors = []
+    for field_name in ("id", "text"):
+        if field_name not in data:
+            errors.append(
+                f"OpenQuestion missing '{field_name}'",
+            )
+    priority = data.get("priority", "medium")
+    if priority not in VALID_PRIORITIES:
+        errors.append(f"Invalid priority: {priority!r}")
+    if "id" in data:
+        errors += _validate_id(data["id"])
+    return errors
+
+
+def validate_ontology_strict(data):
+    """Validate ontology data from external input.
+
+    Returns list of error strings, empty if valid.
+    """
+    errors = []
+    for entity in data.get("entities", []):
+        errors += _validate_entity(entity)
+    for rel in data.get("relationships", []):
+        errors += _validate_relationship(rel)
+    for mod in data.get("modules", []):
+        errors += _validate_module(mod)
+    for q in data.get("open_questions", []):
+        errors += _validate_open_question(q)
+    return errors

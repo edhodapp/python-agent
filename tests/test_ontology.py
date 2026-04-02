@@ -17,6 +17,7 @@ from python_agent.ontology import (
     Property,
     PropertyType,
     Relationship,
+    validate_ontology_strict,
 )
 
 
@@ -610,3 +611,139 @@ class TestOntologyDAG:
         assert dag.root_nodes() == [node]
         assert dag.children_of("n1") == []
         assert dag.parents_of("n1") == []
+
+
+class TestValidateOntologyStrict:
+    """Tests for validate_ontology_strict."""
+
+    def test_valid_passes(self):
+        data = {
+            "entities": [{"id": "e1", "name": "User"}],
+            "relationships": [{
+                "source_entity_id": "e1",
+                "target_entity_id": "e2",
+                "name": "owns",
+                "cardinality": "one_to_many",
+            }],
+            "modules": [{
+                "name": "m", "responsibility": "r",
+            }],
+            "open_questions": [{"id": "q1", "text": "?"}],
+        }
+        assert validate_ontology_strict(data) == []
+
+    def test_empty_passes(self):
+        assert validate_ontology_strict({}) == []
+
+    def test_missing_entity_id(self):
+        data = {"entities": [{"name": "X"}]}
+        errors = validate_ontology_strict(data)
+        assert any("missing 'id'" in e for e in errors)
+
+    def test_missing_entity_name(self):
+        data = {"entities": [{"id": "e1"}]}
+        errors = validate_ontology_strict(data)
+        assert any("missing 'name'" in e for e in errors)
+
+    def test_invalid_entity_id(self):
+        data = {"entities": [
+            {"id": "has spaces!", "name": "X"},
+        ]}
+        errors = validate_ontology_strict(data)
+        assert any("invalid chars" in e for e in errors)
+
+    def test_entity_id_too_long(self):
+        data = {"entities": [
+            {"id": "a" * 101, "name": "X"},
+        ]}
+        errors = validate_ontology_strict(data)
+        assert any("too long" in e for e in errors)
+
+    def test_entity_name_too_long(self):
+        data = {"entities": [
+            {"id": "e1", "name": "a" * 101},
+        ]}
+        errors = validate_ontology_strict(data)
+        assert any(
+            "name too long" in e.lower() for e in errors
+        )
+
+    def test_entity_description_too_long(self):
+        data = {"entities": [{
+            "id": "e1", "name": "X",
+            "description": "a" * 2001,
+        }]}
+        errors = validate_ontology_strict(data)
+        assert any(
+            "description too long" in e.lower()
+            for e in errors
+        )
+
+    def test_invalid_property_kind(self):
+        data = {"entities": [{
+            "id": "e1", "name": "X",
+            "properties": [{
+                "name": "p",
+                "property_type": {"kind": "invalid"},
+            }],
+        }]}
+        errors = validate_ontology_strict(data)
+        assert any(
+            "Invalid property kind" in e
+            for e in errors
+        )
+
+    def test_valid_property_kinds(self):
+        for kind in (
+            "str", "int", "float", "bool",
+            "datetime", "entity_ref", "list", "enum",
+        ):
+            data = {"entities": [{
+                "id": "e1", "name": "X",
+                "properties": [{
+                    "name": "p",
+                    "property_type": {"kind": kind},
+                }],
+            }]}
+            assert validate_ontology_strict(data) == []
+
+    def test_invalid_cardinality(self):
+        data = {"relationships": [{
+            "source_entity_id": "e1",
+            "target_entity_id": "e2",
+            "name": "r",
+            "cardinality": "many_to_none",
+        }]}
+        errors = validate_ontology_strict(data)
+        assert any("cardinality" in e for e in errors)
+
+    def test_missing_relationship_fields(self):
+        data = {"relationships": [{}]}
+        errors = validate_ontology_strict(data)
+        assert len(errors) == 4
+
+    def test_invalid_module_status(self):
+        data = {"modules": [{
+            "name": "m", "responsibility": "r",
+            "status": "deleted",
+        }]}
+        errors = validate_ontology_strict(data)
+        assert any("status" in e for e in errors)
+
+    def test_missing_module_fields(self):
+        data = {"modules": [{}]}
+        errors = validate_ontology_strict(data)
+        assert any("missing" in e for e in errors)
+
+    def test_invalid_priority(self):
+        data = {"open_questions": [{
+            "id": "q1", "text": "?",
+            "priority": "urgent",
+        }]}
+        errors = validate_ontology_strict(data)
+        assert any("priority" in e for e in errors)
+
+    def test_missing_question_fields(self):
+        data = {"open_questions": [{}]}
+        errors = validate_ontology_strict(data)
+        assert any("missing" in e for e in errors)

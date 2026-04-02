@@ -212,20 +212,22 @@ class TestHandleAcceptCmd:
 class TestHandleBackCmd:
     """Tests for _handle_back_cmd."""
 
-    def test_at_root(self):
+    def test_at_root(self, tmp_path):
         dag = _make_branching_dag()
+        path = str(tmp_path / "dag.json")
         msg, onto, accept = _handle_back_cmd(
-            "back", Ontology(), dag, "/dev/null",
+            "back", Ontology(), dag, path,
         )
         assert "root" in msg.lower()
         assert onto is None
         assert accept is False
 
-    def test_from_child(self):
+    def test_from_child(self, tmp_path):
         dag = _make_branching_dag()
         dag.current_node_id = "child_a"
+        path = str(tmp_path / "dag.json")
         msg, onto, accept = _handle_back_cmd(
-            "back", Ontology(), dag, "/dev/null",
+            "back", Ontology(), dag, path,
         )
         assert "root" in msg
         assert onto is not None
