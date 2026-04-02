@@ -1,5 +1,7 @@
 """Tests for dag_utils module."""
 
+import pytest
+
 from python_agent.dag_utils import (
     load_dag,
     make_node_id,
@@ -40,6 +42,28 @@ class TestSaveDag:
         loaded = load_dag(path, "x")
         assert loaded.project_name == "test"
 
+    def test_atomic_write_cleanup_on_error(self, tmp_path):
+        """Temp file is cleaned up if rename fails."""
+        import os
+        from unittest.mock import patch
+
+        path = str(tmp_path / "dag.json")
+        dag = OntologyDAG(project_name="test")
+
+        with patch(
+            "python_agent.dag_utils.os.rename",
+            side_effect=OSError("fake"),
+        ):
+            with pytest.raises(OSError, match="fake"):
+                save_dag(dag, path)
+
+        # Temp file should be cleaned up
+        tmp_files = [
+            f for f in os.listdir(str(tmp_path))
+            if f.endswith(".tmp")
+        ]
+        assert tmp_files == []
+
 
 class TestMakeNodeId:
     """Tests for make_node_id."""
@@ -49,9 +73,15 @@ class TestMakeNodeId:
         assert isinstance(nid, str)
         assert len(nid) > 0
 
-    def test_contains_timestamp(self):
+    def test_unique_ids(self):
+        ids = {make_node_id() for _ in range(100)}
+        assert len(ids) == 100
+
+    def test_uuid4_format(self):
+        import uuid
         nid = make_node_id()
-        assert "T" in nid
+        parsed = uuid.UUID(nid)
+        assert parsed.version == 4
 
 
 class TestSaveSnapshot:

@@ -20,12 +20,12 @@ from python_agent.dag_utils import (
     save_dag,
     save_snapshot,
 )
+from python_agent.agent_utils import read_user_input
 from python_agent.discovery_agent import (
     backtrack,
     format_ontology_summary,
     print_response,
     process_response,
-    read_user_input,
 )
 from python_agent.ontology import (
     DAGNode,

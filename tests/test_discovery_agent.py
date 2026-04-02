@@ -352,8 +352,11 @@ class TestHandleCommand:
     def test_show(self):
         o = Ontology()
         dag = OntologyDAG(project_name="p")
-        result = handle_command("show", o, dag, "/tmp/x")
-        assert "Entities (0):" in result
+        msg, new_onto = handle_command(
+            "show", o, dag, "/tmp/x",
+        )
+        assert "Entities (0):" in msg
+        assert new_onto is None
 
     def test_back_at_root(self):
         dag = OntologyDAG(
@@ -365,15 +368,21 @@ class TestHandleCommand:
             current_node_id="root",
         )
         o = Ontology()
-        result = handle_command("back", o, dag, "/tmp/x")
-        assert "root" in result.lower()
+        msg, new_onto = handle_command(
+            "back", o, dag, "/tmp/x",
+        )
+        assert "root" in msg.lower()
+        assert new_onto is None
 
     def test_save_creates_snapshot(self, tmp_path):
         path = str(tmp_path / "dag.json")
         dag = OntologyDAG(project_name="p")
         o = Ontology()
-        result = handle_command("save first", o, dag, path)
-        assert "Saved snapshot" in result
+        msg, new_onto = handle_command(
+            "save first", o, dag, path,
+        )
+        assert "Saved snapshot" in msg
+        assert new_onto is None
         assert os.path.exists(path)
 
 
@@ -384,15 +393,20 @@ class TestHandleSave:
         path = str(tmp_path / "dag.json")
         dag = OntologyDAG(project_name="p")
         o = Ontology()
-        _handle_save("save", o, dag, path)
+        msg, new_onto = _handle_save("save", o, dag, path)
         assert "snapshot" in dag.nodes[0].label
+        assert new_onto is None
+        assert "Saved" in msg
 
     def test_custom_label(self, tmp_path):
         path = str(tmp_path / "dag.json")
         dag = OntologyDAG(project_name="p")
         o = Ontology()
-        _handle_save("save my label", o, dag, path)
+        msg, new_onto = _handle_save(
+            "save my label", o, dag, path,
+        )
         assert dag.nodes[0].label == "my label"
+        assert new_onto is None
 
 
 class TestHandleBack:
@@ -430,10 +444,28 @@ class TestHandleBack:
             )],
             current_node_id="child",
         )
-        o = Ontology()
-        _handle_back(o, dag, str(tmp_path / "dag.json"))
-        assert len(o.entities) == 1
-        assert o.entities[0].name == "Root"
+        msg, new_onto = _handle_back(
+            dag, str(tmp_path / "dag.json"),
+        )
+        assert new_onto is not None
+        assert len(new_onto.entities) == 1
+        assert new_onto.entities[0].name == "Root"
+        assert "root" in msg
+
+    def test_at_root(self, tmp_path):
+        dag = OntologyDAG(
+            project_name="p",
+            nodes=[DAGNode(
+                id="root", ontology=Ontology(),
+                created_at="t",
+            )],
+            current_node_id="root",
+        )
+        msg, new_onto = _handle_back(
+            dag, str(tmp_path / "dag.json"),
+        )
+        assert "root" in msg.lower()
+        assert new_onto is None
 
 
 class TestPrintTextBlocks:

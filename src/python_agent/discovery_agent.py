@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
-import re
 import sys
 from typing import Any
 
@@ -13,9 +11,14 @@ from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
     ClaudeSDKClient,
-    TextBlock,
 )
 
+from python_agent.agent_utils import (
+    collect_response_text,
+    extract_ontology_json,
+    print_text_blocks,
+    read_user_input,
+)
 from python_agent.dag_utils import (
     load_dag,
     save_dag,
@@ -34,37 +37,6 @@ from python_agent.rules import (
     discovery_system_prompt,
     frame_data,
 )
-
-_ONTOLOGY_BLOCK_RE = re.compile(
-    r"```ontology\s*\n(.*?)\n```",
-    re.DOTALL,
-)
-
-
-def collect_response_text(message: Any) -> str:
-    """Extract concatenated text from an AssistantMessage."""
-    parts: list[str] = []
-    for block in message.content:
-        if isinstance(block, TextBlock):
-            parts.append(block.text)
-    return "\n".join(parts)
-
-
-def extract_ontology_json(
-    text: str,
-) -> dict[str, Any] | None:
-    """Extract the first ontology JSON block from text.
-
-    Returns the parsed dict, or None if no valid block found.
-    """
-    match = _ONTOLOGY_BLOCK_RE.search(text)
-    if match is None:
-        return None
-    try:
-        result: dict[str, Any] = json.loads(match.group(1))
-        return result
-    except json.JSONDecodeError:
-        return None
 
 
 def _upsert_entities(
@@ -222,35 +194,38 @@ def backtrack(dag: OntologyDAG) -> DAGNode | None:
     return dag.get_current_node()
 
 
-def _handle_show(ontology: Ontology) -> str:
+_CmdResult = tuple[str, Ontology | None]
+
+
+def _handle_show(ontology: Ontology) -> _CmdResult:
     """Handle the 'show' command."""
-    return format_ontology_summary(ontology)
+    return format_ontology_summary(ontology), None
 
 
 def _handle_save(
     command: str, ontology: Ontology,
     dag: OntologyDAG, dag_path: str,
-) -> str:
+) -> _CmdResult:
     """Handle the 'save' command."""
     label = command.strip()[4:].strip() or "snapshot"
     save_snapshot(dag, ontology, label)
     save_dag(dag, dag_path)
-    return f"Saved snapshot: {dag.current_node_id}"
+    return f"Saved snapshot: {dag.current_node_id}", None
 
 
 def _handle_back(
-    ontology: Ontology, dag: OntologyDAG,
-    dag_path: str,
-) -> str:
+    dag: OntologyDAG, dag_path: str,
+) -> _CmdResult:
     """Handle the 'back' command."""
     node = backtrack(dag)
     if node is None:
-        return "Already at root."
-    ontology.__dict__.update(
-        node.ontology.model_copy(deep=True).__dict__,
-    )
+        return "Already at root.", None
+    new_onto = node.ontology.model_copy(deep=True)
     save_dag(dag, dag_path)
-    return f"Backtracked to: {node.id} ({node.label})"
+    return (
+        f"Backtracked to: {node.id} ({node.label})",
+        new_onto,
+    )
 
 
 def is_command(text: str) -> bool:
@@ -264,21 +239,17 @@ def is_command(text: str) -> bool:
 def handle_command(
     command: str, ontology: Ontology,
     dag: OntologyDAG, dag_path: str,
-) -> str:
-    """Dispatch a user meta-command. Returns display string."""
+) -> _CmdResult:
+    """Dispatch a user meta-command.
+
+    Returns (message, new_ontology_or_None).
+    """
     cmd = command.strip().lower()
     if cmd == "show":
         return _handle_show(ontology)
     if cmd == "back":
-        return _handle_back(ontology, dag, dag_path)
+        return _handle_back(dag, dag_path)
     return _handle_save(command, ontology, dag, dag_path)
-
-
-def print_text_blocks(message: Any) -> None:
-    """Print TextBlock content from an AssistantMessage."""
-    for block in message.content:
-        if isinstance(block, TextBlock):
-            print(block.text)
 
 
 async def print_response(client: Any) -> str:
@@ -289,20 +260,6 @@ async def print_response(client: Any) -> str:
             print_text_blocks(message)
             parts.append(collect_response_text(message))
     return "\n".join(parts)
-
-
-def read_user_input() -> str | None:
-    """Read a line from the user. Return None to quit."""
-    try:
-        user_input = input("\n> ")
-    except (EOFError, KeyboardInterrupt):
-        print("\nDone.")
-        return None
-    if user_input.strip().lower() in (
-        "quit", "exit", "done",
-    ):
-        return None
-    return user_input
 
 
 def _init_ontology(dag: OntologyDAG) -> Ontology:
@@ -340,10 +297,12 @@ async def run(
             if user_input is None:
                 break
             if is_command(user_input):
-                msg = handle_command(
+                msg, new_onto = handle_command(
                     user_input, ontology, dag, dag_path,
                 )
                 print(msg)
+                if new_onto is not None:
+                    ontology = new_onto
                 continue
             framed = frame_data("user-input", user_input)
             await client.query(framed)

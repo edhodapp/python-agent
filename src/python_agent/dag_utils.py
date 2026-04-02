@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
+import uuid
 import warnings
 from datetime import datetime, timezone
 from pathlib import Path
@@ -111,19 +114,33 @@ def save_dag(
     dag: OntologyDAG, path: str,
     key_path: str | None = None,
 ) -> None:
-    """Save an OntologyDAG, signing unsigned nodes."""
+    """Save an OntologyDAG, signing unsigned nodes.
+
+    Uses atomic write (temp file + rename) to prevent
+    corruption from interrupted writes.
+    """
     if key_path is None:
         key_path = _default_key_path(path)
     key = load_or_create_key(key_path)
     _sign_unsigned_nodes(dag, key)
-    with open(path, "w") as f:
-        f.write(dag.to_json())
+    parent_dir = os.path.dirname(os.path.abspath(path))
+    fd = tempfile.NamedTemporaryFile(
+        mode="w", dir=parent_dir,
+        suffix=".tmp", delete=False,
+    )
+    try:
+        fd.write(dag.to_json())
+        fd.close()
+        os.rename(fd.name, path)
+    except BaseException:
+        fd.close()
+        os.unlink(fd.name)
+        raise
 
 
 def make_node_id() -> str:
-    """Generate a unique node ID from current timestamp."""
-    now = datetime.now(timezone.utc)
-    return now.strftime("%Y%m%dT%H%M%S%f")
+    """Generate a unique node ID using uuid4."""
+    return str(uuid.uuid4())
 
 
 def save_snapshot(

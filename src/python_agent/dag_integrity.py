@@ -102,20 +102,80 @@ def scan_text_for_injection(text: str) -> list[str]:
     return matches
 
 
+def _collect_entity_texts(
+    ontology_dict: dict[str, Any],
+) -> list[str]:
+    """Extract text fields from entities."""
+    texts: list[str] = []
+    for entity in ontology_dict.get("entities", []):
+        texts.append(entity.get("description", ""))
+    return texts
+
+
+def _collect_relationship_texts(
+    ontology_dict: dict[str, Any],
+) -> list[str]:
+    """Extract text fields from relationships."""
+    texts: list[str] = []
+    for r in ontology_dict.get("relationships", []):
+        texts.append(r.get("description", ""))
+    return texts
+
+
+def _collect_constraint_texts(
+    ontology_dict: dict[str, Any],
+) -> list[str]:
+    """Extract text fields from domain constraints."""
+    texts: list[str] = []
+    for c in ontology_dict.get("domain_constraints", []):
+        texts.append(c.get("description", ""))
+        texts.append(c.get("expression", ""))
+    return texts
+
+
+def _collect_module_texts(
+    ontology_dict: dict[str, Any],
+) -> list[str]:
+    """Extract text fields from modules, classes, functions."""
+    texts: list[str] = []
+    for m in ontology_dict.get("modules", []):
+        texts.append(m.get("responsibility", ""))
+        texts.append(m.get("test_strategy", ""))
+        for cls in m.get("classes", []):
+            texts.append(cls.get("description", ""))
+            for fn in cls.get("methods", []):
+                texts.append(fn.get("docstring", ""))
+        for fn in m.get("functions", []):
+            texts.append(fn.get("docstring", ""))
+    return texts
+
+
+def _collect_misc_texts(
+    ontology_dict: dict[str, Any],
+) -> list[str]:
+    """Extract text from data_models, dependencies, questions."""
+    texts: list[str] = []
+    for dm in ontology_dict.get("data_models", []):
+        texts.append(dm.get("notes", ""))
+    for dep in ontology_dict.get("external_dependencies", []):
+        texts.append(dep.get("reason", ""))
+    for q in ontology_dict.get("open_questions", []):
+        texts.append(q.get("text", ""))
+        texts.append(q.get("context", ""))
+        texts.append(q.get("resolution", ""))
+    return texts
+
+
 def _collect_text_fields(
     ontology_dict: dict[str, Any],
 ) -> list[str]:
     """Extract all free-text fields from an ontology dict."""
     texts: list[str] = []
-    for entity in ontology_dict.get("entities", []):
-        texts.append(entity.get("description", ""))
-    for c in ontology_dict.get("domain_constraints", []):
-        texts.append(c.get("description", ""))
-        texts.append(c.get("expression", ""))
-    for q in ontology_dict.get("open_questions", []):
-        texts.append(q.get("text", ""))
-        texts.append(q.get("context", ""))
-        texts.append(q.get("resolution", ""))
+    texts += _collect_entity_texts(ontology_dict)
+    texts += _collect_relationship_texts(ontology_dict)
+    texts += _collect_constraint_texts(ontology_dict)
+    texts += _collect_module_texts(ontology_dict)
+    texts += _collect_misc_texts(ontology_dict)
     return [t for t in texts if t]
 
 

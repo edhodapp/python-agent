@@ -32,6 +32,12 @@ BLOCKED_BASH_PATTERNS: list[re.Pattern[str]] = [
         r"(>|>>)\s*~/\.bashrc",
         r"\bkill\s+-9\b",
         r"\bpkill\b",
+        r"\bpython3?\s+-c\b",
+        r"\bperl\s+-e\b",
+        r"\bruby\s+-e\b",
+        r"\bnode\s+-e\b",
+        r"\bbash\s+-c\b",
+        r"\bcat\s+/etc/",
     ]
 ]
 

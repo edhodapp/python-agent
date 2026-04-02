@@ -9,7 +9,6 @@ import os
 import re
 import sys
 from collections import defaultdict
-from typing import Optional
 
 from pydantic import BaseModel
 
@@ -267,7 +266,7 @@ class _CallVisitor(ast.NodeVisitor):
         self.module = module
         self.imports = imports
         self.edges: list[CallEdge] = []
-        self._current_func: Optional[str] = None
+        self._current_func: str | None = None
 
     def _visit_func(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         old = self._current_func
@@ -400,10 +399,21 @@ def parse_file(
     list[FunctionInfo], list[CallEdge],
     list[Suppression],
 ]:
-    """Parse a .py file. Return functions, edges, suppressions."""
+    """Parse a .py file. Return functions, edges, suppressions.
+
+    Returns empty results with a warning on SyntaxError.
+    """
     with open(path) as fh:
         source = fh.read()
-    tree = ast.parse(source, filename=path)
+    try:
+        tree = ast.parse(source, filename=path)
+    except SyntaxError:
+        import warnings
+        warnings.warn(
+            f"SyntaxError in {path}, skipping",
+            stacklevel=2,
+        )
+        return [], [], []
     imports = _collect_imports(tree)
     fv = _FunctionVisitor(module_name)
     fv.visit(tree)
@@ -438,14 +448,6 @@ def _build_forward_adj(graph: CallGraph) -> dict[str, list[str]]:
     return dict(adj)
 
 
-def _build_reverse_adj(graph: CallGraph) -> dict[str, list[str]]:
-    """Build callee -> [caller] adjacency list."""
-    adj: dict[str, list[str]] = defaultdict(list)
-    for e in graph.edges:
-        adj[e.callee].append(e.caller)
-    return dict(adj)
-
-
 def _find_sources(graph: CallGraph) -> list[str]:
     """Return names of all source functions in the graph."""
     return [
@@ -463,27 +465,12 @@ def _find_sinks(graph: CallGraph) -> dict[str, str]:
     }
 
 
-def _bfs_tainted(
-    source: str, reverse_adj: dict[str, list[str]],
-) -> set[str]:
-    """Reverse BFS: find all callers reachable from *source*."""
-    visited: set[str] = {source}
-    queue = [source]
-    while queue:
-        current = queue.pop(0)
-        for neighbor in reverse_adj.get(current, []):
-            if neighbor not in visited:
-                visited.add(neighbor)
-                queue.append(neighbor)
-    return visited
-
-
 def _check_sink_hit(
     node: str,
     start: str,
     path: list[str],
     sinks: dict[str, str],
-) -> Optional[tuple[str, list[str], str]]:
+) -> tuple[str, list[str], str] | None:
     """Return a sink hit tuple if *node* is a sink (and not start)."""
     if node in sinks and node != start:
         return (node, path, sinks[node])
@@ -667,7 +654,7 @@ def format_sarif(
 # CLI
 # ---------------------------------------------------------------------------
 
-def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
         description="Source-to-sink taint analysis via call graph",
@@ -689,7 +676,7 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     """Entry point for the call-graph CLI."""
     args = parse_args(argv)
     graph = build_graph(args.directory)

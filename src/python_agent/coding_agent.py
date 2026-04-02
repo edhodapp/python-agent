@@ -11,21 +11,14 @@ from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
     ResultMessage,
-    TextBlock,
     query,
 )
 
+from python_agent.agent_utils import print_text_blocks
 from python_agent.rules import coding_system_prompt
 from python_agent.tool_guard import make_tool_guard
 
 ESCALATION_MODEL = "claude-opus-4-6"
-
-
-def print_text_blocks(message: Any) -> None:
-    """Print TextBlock content from an AssistantMessage."""
-    for block in message.content:
-        if isinstance(block, TextBlock):
-            print(block.text)
 
 
 async def run_query(

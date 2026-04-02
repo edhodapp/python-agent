@@ -11,17 +11,13 @@ from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
     ClaudeSDKClient,
-    TextBlock,
 )
 
+from python_agent.agent_utils import (
+    print_text_blocks,
+    read_user_input,
+)
 from python_agent.rules import frame_data, planning_system_prompt
-
-
-def print_text_blocks(message: Any) -> None:
-    """Print TextBlock content from an AssistantMessage."""
-    for block in message.content:
-        if isinstance(block, TextBlock):
-            print(block.text)
 
 
 async def print_response(client: Any) -> None:
@@ -29,18 +25,6 @@ async def print_response(client: Any) -> None:
     async for message in client.receive_response():
         if isinstance(message, AssistantMessage):
             print_text_blocks(message)
-
-
-def read_user_input() -> str | None:
-    """Read a line from the user. Return None to quit."""
-    try:
-        user_input = input("\n> ")
-    except (EOFError, KeyboardInterrupt):
-        print("\nDone.")
-        return None
-    if user_input.strip().lower() in ("quit", "exit", "done"):
-        return None
-    return user_input
 
 
 # taint: ignore[CWE-200] -- Interactive agent displays LLM output to user

@@ -7,17 +7,25 @@ import asyncio
 import json
 import re
 import sys
+import warnings
 from typing import Any
 
 from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
     ResultMessage,
-    TextBlock,
     query,
 )
 
-from python_agent.dag_utils import load_dag, save_dag
+from python_agent.agent_utils import (
+    collect_response_text,
+    extract_ontology_json,
+)
+from python_agent.dag_utils import (
+    load_dag,
+    make_node_id,
+    save_dag,
+)
 from python_agent.ontology import (
     DAGEdge,
     DAGNode,
@@ -30,38 +38,10 @@ from python_agent.rules import (
     strategy_system_prompt,
 )
 
-_ONTOLOGY_BLOCK_RE = re.compile(
-    r"```ontology\s*\n(.*?)\n```",
-    re.DOTALL,
-)
-
 _STRATEGIES_BLOCK_RE = re.compile(
     r"```strategies\s*\n(.*?)\n```",
     re.DOTALL,
 )
-
-
-def collect_response_text(message: Any) -> str:
-    """Extract concatenated text from an AssistantMessage."""
-    parts: list[str] = []
-    for block in message.content:
-        if isinstance(block, TextBlock):
-            parts.append(block.text)
-    return "\n".join(parts)
-
-
-def extract_ontology_json(
-    text: str,
-) -> dict[str, Any] | None:
-    """Extract the first ontology JSON block from text."""
-    match = _ONTOLOGY_BLOCK_RE.search(text)
-    if match is None:
-        return None
-    try:
-        result: dict[str, Any] = json.loads(match.group(1))
-        return result
-    except json.JSONDecodeError:
-        return None
 
 
 def extract_strategies(
@@ -105,6 +85,10 @@ def build_decision(
     """Create a Decision from a strategy dict."""
     options = strategy.get("options", [])
     if not isinstance(options, list):
+        warnings.warn(
+            f"Non-list options replaced: {type(options)}",
+            stacklevel=2,
+        )
         options = []
     return Decision(
         question=str(strategy.get("question", "architecture")),
@@ -122,7 +106,7 @@ def add_candidate_node(
     """Create a DAG node for a candidate and link it."""
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc)
-    node_id = now.strftime("%Y%m%dT%H%M%S%f")
+    node_id = make_node_id()
     label: str = strategy.get("label", "candidate")
     ontology = Ontology.model_validate(ontology_dict)
     node = DAGNode(
@@ -303,7 +287,7 @@ def parse_args(
 def main(argv: list[str] | None = None) -> int:
     """Entry point for the divergence-agent CLI."""
     args = parse_args(argv)
-    asyncio.run(
+    count = asyncio.run(
         run(
             args.dag_file,
             args.num_candidates,
@@ -311,7 +295,7 @@ def main(argv: list[str] | None = None) -> int:
             args.max_budget,
         ),
     )
-    return 0
+    return 0 if count > 0 else 1
 
 
 if __name__ == "__main__":

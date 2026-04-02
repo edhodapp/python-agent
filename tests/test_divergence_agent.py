@@ -181,6 +181,19 @@ class TestBuildDecision:
         assert d.chosen == ""
         assert d.rationale == ""
 
+    def test_non_list_options_warns(self):
+        import warnings
+        s = {"options": "not a list"}
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            d = build_decision(s)
+        assert d.options == []
+        opt_warns = [
+            x for x in w
+            if "Non-list" in str(x.message)
+        ]
+        assert len(opt_warns) == 1
+
 
 class TestAddCandidateNode:
     """Tests for add_candidate_node."""
@@ -518,10 +531,17 @@ class TestMain:
     """Tests for main."""
 
     @patch("python_agent.divergence_agent.asyncio.run")
-    def test_returns_zero(self, mock_run):
+    def test_returns_zero_on_success(self, mock_run):
+        mock_run.return_value = 3
         assert main(["--dag-file", "x.json"]) == 0
 
     @patch("python_agent.divergence_agent.asyncio.run")
+    def test_returns_one_on_failure(self, mock_run):
+        mock_run.return_value = 0
+        assert main(["--dag-file", "x.json"]) == 1
+
+    @patch("python_agent.divergence_agent.asyncio.run")
     def test_calls_asyncio_run(self, mock_run):
+        mock_run.return_value = 1
         main(["--dag-file", "x.json"])
         mock_run.assert_called_once()

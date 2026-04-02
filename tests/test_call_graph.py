@@ -14,10 +14,8 @@ from python_agent.call_graph import (
     FunctionInfo,
     TaintPath,
     _attr_parts,
-    _bfs_tainted,
     _bfs_to_sinks,
     _build_forward_adj,
-    _build_reverse_adj,
     _check_sink_hit,
     _classify_as_sink,
     _classify_as_source,
@@ -405,6 +403,30 @@ class TestParseFile:
 # build_graph
 # -----------------------------------------------------------------------
 
+class TestParseFileSyntaxError:
+    """Tests for parse_file with SyntaxError handling."""
+
+    def test_syntax_error_returns_empty(
+        self, tmp_path: Any,
+    ) -> None:
+        p = tmp_path / "bad.py"
+        p.write_text("def f(:\n    pass\n")
+        import warnings
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            funcs, edges, supps = parse_file(
+                str(p), "bad",
+            )
+        assert funcs == []
+        assert edges == []
+        assert supps == []
+        syntax_warns = [
+            x for x in w
+            if "SyntaxError" in str(x.message)
+        ]
+        assert len(syntax_warns) == 1
+
+
 class TestBuildGraph:
     def test_basic(self, tmp_path: Any) -> None:
         src = textwrap.dedent("""\
@@ -429,7 +451,7 @@ class TestBuildGraph:
 
 
 # -----------------------------------------------------------------------
-# _build_forward_adj / _build_reverse_adj
+# _build_forward_adj
 # -----------------------------------------------------------------------
 
 class TestAdjacencyBuilders:
@@ -448,12 +470,6 @@ class TestAdjacencyBuilders:
         fwd = _build_forward_adj(g)
         assert fwd["a"] == ["b", "c"]
         assert fwd["b"] == ["c"]
-
-    def test_reverse(self) -> None:
-        g = self._make_graph()
-        rev = _build_reverse_adj(g)
-        assert "a" in rev["b"]
-        assert set(rev["c"]) == {"a", "b"}
 
 
 # -----------------------------------------------------------------------
@@ -484,21 +500,6 @@ class TestFindSourcesSinks:
             ),
         })
         assert _find_sinks(g) == {"a": "CWE-94"}
-
-
-# -----------------------------------------------------------------------
-# _bfs_tainted
-# -----------------------------------------------------------------------
-
-class TestBfsTainted:
-    def test_basic(self) -> None:
-        rev = {"a": ["b", "c"], "b": ["d"]}
-        result = _bfs_tainted("a", rev)
-        assert result == {"a", "b", "c", "d"}
-
-    def test_isolated(self) -> None:
-        result = _bfs_tainted("x", {})
-        assert result == {"x"}
 
 
 # -----------------------------------------------------------------------
@@ -1035,12 +1036,6 @@ class TestUnresolvableCallInFunction:
 # -----------------------------------------------------------------------
 
 class TestBfsCycleHandling:
-    def test_bfs_tainted_cycle(self) -> None:
-        """Cycle in reverse adj: a->b->a should not loop forever."""
-        rev: dict[str, list[str]] = {"a": ["b"], "b": ["a"]}
-        result = _bfs_tainted("a", rev)
-        assert result == {"a", "b"}
-
     def test_bfs_to_sinks_cycle(self) -> None:
         """Cycle in forward adj: visited check prevents re-visit."""
         fwd: dict[str, list[str]] = {
