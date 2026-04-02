@@ -14,12 +14,15 @@ authors = [
 ]
 dependencies = [
     "claude-agent-sdk",
+    "pydantic>=2.12",
 ]
 
 [project.optional-dependencies]
 dev = [
     "hypothesis",
     "mutmut<3",
+    "mypy",
+    "pydantic>=2.12",
     "pytest",
     "pytest-asyncio",
     "pytest-cov",
@@ -49,6 +52,23 @@ testpaths = ["tests"]
 [tool.flake8]
 max-complexity = 5
 max-line-length = 99
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+plugins = ["pydantic.mypy"]
+warn_return_any = true
+warn_unused_configs = true
+
+[[tool.mypy.overrides]]
+module = "claude_agent_sdk.*"
+ignore_missing_imports = true
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+warn_untyped_fields = true
 
 [tool.mutmut]
 paths_to_mutate = "src/python_agent/"
