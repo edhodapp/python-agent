@@ -8,6 +8,7 @@ from pathlib import Path
 
 from python_agent.dag_integrity import (
     load_or_create_key,
+    scan_ontology_for_injection,
     sign_node,
     verify_dag,
 )
@@ -51,6 +52,19 @@ def _verify_loaded_dag(
         )
 
 
+def _scan_loaded_dag(dag: OntologyDAG) -> None:
+    """Scan all nodes for injection patterns."""
+    for node in dag.nodes:
+        hits = scan_ontology_for_injection(
+            node.ontology.model_dump(),
+        )
+        for hit in hits:
+            warnings.warn(
+                f"Node {node.id}: {hit}",
+                stacklevel=3,
+            )
+
+
 def _read_file(path: str) -> str | None:
     """Read file contents, or return None if not found."""
     try:
@@ -89,6 +103,7 @@ def load_dag(
     if key_path is None:
         key_path = _default_key_path(path)
     _verify_loaded_dag(dag, key_path)
+    _scan_loaded_dag(dag)
     return dag
 
 

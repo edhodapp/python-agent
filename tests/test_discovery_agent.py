@@ -588,7 +588,9 @@ class TestRun:
             )
             await run("build X", "claude-opus-4-6", path)
 
-        client.query.assert_any_call("build X")
+        call_arg = client.query.call_args[0][0]
+        assert "build X" in call_arg
+        assert "<user-input>" in call_arg
 
     @pytest.mark.asyncio
     async def test_handles_command(self, tmp_path, capsys):
@@ -675,7 +677,12 @@ class TestRun:
             )
             await run("desc", "claude-opus-4-6", path)
 
-        client.query.assert_any_call("add a User entity")
+        call_args = [
+            c[0][0] for c in client.query.call_args_list
+        ]
+        assert any(
+            "add a User entity" in a for a in call_args
+        )
 
 
 class TestParseArgs:

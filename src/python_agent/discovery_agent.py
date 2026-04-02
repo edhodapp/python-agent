@@ -30,7 +30,10 @@ from python_agent.ontology import (
     OpenQuestion,
     Relationship,
 )
-from python_agent.rules import discovery_system_prompt
+from python_agent.rules import (
+    discovery_system_prompt,
+    frame_data,
+)
 
 _ONTOLOGY_BLOCK_RE = re.compile(
     r"```ontology\s*\n(.*?)\n```",
@@ -327,7 +330,8 @@ async def run(
     )
 
     async with ClaudeSDKClient(options=options) as client:
-        await client.query(description)
+        framed = frame_data("user-input", description)
+        await client.query(framed)
         text = await print_response(client)
         process_response(text, ontology)
 
@@ -341,7 +345,8 @@ async def run(
                 )
                 print(msg)
                 continue
-            await client.query(user_input)
+            framed = frame_data("user-input", user_input)
+            await client.query(framed)
             text = await print_response(client)
             process_response(text, ontology)
 

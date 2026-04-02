@@ -167,7 +167,9 @@ class TestRun:
             )
             await run("build a thing", "claude-opus-4-6")
 
-        client.query.assert_any_call("build a thing")
+        call_arg = client.query.call_args[0][0]
+        assert "build a thing" in call_arg
+        assert "<user-input>" in call_arg
 
     @pytest.mark.asyncio
     async def test_loops_on_user_input(self):
@@ -205,7 +207,11 @@ class TestRun:
             )
             await run("idea", "claude-opus-4-6")
 
-        client.query.assert_any_call("tell me more")
+        call_args = [
+            c[0][0] for c in client.query.call_args_list
+        ]
+        assert any("tell me more" in a for a in call_args)
+        assert any("<user-input>" in a for a in call_args)
 
     @pytest.mark.asyncio
     async def test_exits_on_none_input(self):

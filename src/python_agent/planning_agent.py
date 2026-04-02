@@ -14,7 +14,7 @@ from claude_agent_sdk import (
     TextBlock,
 )
 
-from python_agent.rules import planning_system_prompt
+from python_agent.rules import frame_data, planning_system_prompt
 
 
 def print_text_blocks(message: Any) -> None:
@@ -56,14 +56,16 @@ async def run(initial_prompt: str, model: str) -> None:
     )
 
     async with ClaudeSDKClient(options=options) as client:
-        await client.query(initial_prompt)
+        framed = frame_data("user-input", initial_prompt)
+        await client.query(framed)
         await print_response(client)
 
         while True:
             user_input = read_user_input()
             if user_input is None:
                 break
-            await client.query(user_input)
+            framed = frame_data("user-input", user_input)
+            await client.query(framed)
             await print_response(client)
 
 
