@@ -40,6 +40,18 @@ class TestIsPathWithin:
         """Relative path resolved from cwd."""
         assert is_path_within("src/main.py", ".") is True
 
+    def test_commonpath_valueerror(self):
+        """ValueError from commonpath returns False.
+
+        Happens on Windows with paths on different drives.
+        """
+        from unittest.mock import patch
+        with patch(
+            "python_agent.tool_guard.commonpath",
+            side_effect=ValueError("different drives"),
+        ):
+            assert is_path_within("D:\\x", "C:\\proj") is False
+
 
 class TestIsSafeBash:
     """Tests for is_safe_bash."""
