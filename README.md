@@ -2,7 +2,7 @@
 
 [![Lint](https://github.com/edhodapp/python-agent/actions/workflows/lint.yml/badge.svg)](https://github.com/edhodapp/python-agent/actions/workflows/lint.yml)
 [![Type Check](https://github.com/edhodapp/python-agent/actions/workflows/typecheck.yml/badge.svg)](https://github.com/edhodapp/python-agent/actions/workflows/typecheck.yml)
-[![Test](https://github.com/edhodapp/python-agent/actions/workflows/test.yml/badge.svg)](https://github.com/edhodapp/python-agent/actions/workflows/test.yml)
+[![Tests (570)](https://github.com/edhodapp/python-agent/actions/workflows/test.yml/badge.svg)](https://github.com/edhodapp/python-agent/actions/workflows/test.yml)
 [![Taint Analysis](https://github.com/edhodapp/python-agent/actions/workflows/taint.yml/badge.svg)](https://github.com/edhodapp/python-agent/actions/workflows/taint.yml)
 [![Fuzz](https://github.com/edhodapp/python-agent/actions/workflows/fuzz.yml/badge.svg)](https://github.com/edhodapp/python-agent/actions/workflows/fuzz.yml)
 [![Mutation](https://github.com/edhodapp/python-agent/actions/workflows/mutation.yml/badge.svg)](https://github.com/edhodapp/python-agent/actions/workflows/mutation.yml)
