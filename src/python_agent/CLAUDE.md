@@ -102,4 +102,4 @@ Two modes, hard boundary between them:
 ## Git
 
 - Commit after every group of code changes. Don't wait to be asked.
-- Committer: edhodapp <ed@hodapp.com>
+- Use the git user.name and user.email configured on the system.

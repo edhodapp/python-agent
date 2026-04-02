@@ -350,16 +350,16 @@ python3 -m venv .venv
 pip install devpi-server devpi-client
 devpi-server --init && devpi-server --start --port 3141
 devpi use http://localhost:3141
-devpi user -c ed password=
-devpi login ed
+devpi user -c myuser password=
+devpi login myuser
 devpi index -c dev bases=root/pypi
-devpi use ed/dev
+devpi use myuser/dev
 
 # Publish
 devpi upload
 
 # Install from local index
-pip install python-agent -i http://localhost:3141/ed/dev/+simple/
+pip install python-agent -i http://localhost:3141/myuser/dev/+simple/
 ```
 
 ## License
