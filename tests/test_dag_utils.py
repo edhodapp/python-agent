@@ -204,7 +204,9 @@ class TestLoadDagVerification:
 class TestLoadDagValidation:
     """Tests for validation on load."""
 
-    def test_invalid_entity_warns(self, tmp_path):
+    def test_invalid_entity_warns_and_returns_empty(
+        self, tmp_path,
+    ):
         import json
         import warnings
         path = str(tmp_path / "dag.json")
@@ -221,9 +223,13 @@ class TestLoadDagValidation:
             json.dump(raw, f)
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            load_dag(path, "x")
+            loaded = load_dag(path, "fallback")
             val_warns = [
                 x for x in w
-                if "validation" in str(x.message).lower()
+                if "validation" in str(
+                    x.message,
+                ).lower()
             ]
             assert len(val_warns) == 1
+        assert loaded.project_name == "fallback"
+        assert loaded.nodes == []

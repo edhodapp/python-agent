@@ -13,9 +13,7 @@ from python_agent.ontology import (
     DAGEdge,
     DAGNode,
     Decision,
-    Ontology,
     OntologyDAG,
-    validate_ontology_strict,
 )
 
 
@@ -46,35 +44,41 @@ def _verify_loaded_dag(dag, key_path):
         )
 
 
-def _validate_loaded_dag(dag):
-    """Validate all node ontologies. Warn on errors."""
-    for node in dag.nodes:
-        errors = validate_ontology_strict(
-            node.ontology.to_dict(),
+def _read_file(path):
+    """Read file contents, or return None if not found."""
+    try:
+        with open(path) as f:
+            return f.read()
+    except FileNotFoundError:
+        return None
+
+
+def _parse_dag(text):
+    """Parse DAG JSON, or return None with warning."""
+    try:
+        return OntologyDAG.from_json(text)
+    except Exception as exc:
+        warnings.warn(
+            f"DAG validation error: {exc}",
+            stacklevel=3,
         )
-        if errors:
-            warnings.warn(
-                f"Node {node.id} validation errors: "
-                + "; ".join(errors),
-                stacklevel=3,
-            )
+        return None
 
 
 def load_dag(path, project_name, key_path=None):
     """Load an OntologyDAG from a JSON file.
 
-    Returns a new empty DAG if the file does not exist.
-    Verifies integrity and validates on load.
+    Returns a new empty DAG if not found or invalid.
     """
-    try:
-        with open(path) as f:
-            dag = OntologyDAG.from_json(f.read())
-    except FileNotFoundError:
+    text = _read_file(path)
+    if text is None:
+        return OntologyDAG(project_name=project_name)
+    dag = _parse_dag(text)
+    if dag is None:
         return OntologyDAG(project_name=project_name)
     if key_path is None:
         key_path = _default_key_path(path)
     _verify_loaded_dag(dag, key_path)
-    _validate_loaded_dag(dag)
     return dag
 
 
@@ -105,7 +109,7 @@ def save_snapshot(dag, ontology, label, decision=None):
     node_id = make_node_id()
     node = DAGNode(
         id=node_id,
-        ontology=Ontology.from_dict(ontology.to_dict()),
+        ontology=ontology.model_copy(deep=True),
         created_at=now,
         label=label,
     )

@@ -11,3 +11,5 @@ htmlcov/
 .mutmut-cache
 .pytest_cache/
 .dag-key
+.hypothesis/
+*.bak

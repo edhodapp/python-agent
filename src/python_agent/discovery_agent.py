@@ -62,7 +62,7 @@ def _upsert_entities(ontology, new_entities):
         e.id: i for i, e in enumerate(ontology.entities)
     }
     for item in new_entities:
-        entity = Entity.from_dict(item)
+        entity = Entity.model_validate(item)
         idx = existing.get(entity.id)
         if idx is not None:
             ontology.entities[idx] = entity
@@ -77,7 +77,7 @@ def _append_relationships(ontology, items):
     """Append new relationships to the ontology."""
     for item in items:
         ontology.relationships.append(
-            Relationship.from_dict(item),
+            Relationship.model_validate(item),
         )
 
 
@@ -85,7 +85,7 @@ def _append_constraints(ontology, items):
     """Append new domain constraints to the ontology."""
     for item in items:
         ontology.domain_constraints.append(
-            DomainConstraint.from_dict(item),
+            DomainConstraint.model_validate(item),
         )
 
 
@@ -96,7 +96,7 @@ def _upsert_open_questions(ontology, items):
         for i, q in enumerate(ontology.open_questions)
     }
     for item in items:
-        question = OpenQuestion.from_dict(item)
+        question = OpenQuestion.model_validate(item)
         idx = existing.get(question.id)
         if idx is not None:
             ontology.open_questions[idx] = question
@@ -216,9 +216,7 @@ def _handle_back(ontology, dag, dag_path):
     if node is None:
         return "Already at root."
     ontology.__dict__.update(
-        Ontology.from_dict(
-            node.ontology.to_dict(),
-        ).__dict__,
+        node.ontology.model_copy(deep=True).__dict__,
     )
     save_dag(dag, dag_path)
     return f"Backtracked to: {node.id} ({node.label})"
@@ -278,7 +276,7 @@ def _init_ontology(dag):
     node = dag.get_current_node()
     if node is None:
         return Ontology()
-    return Ontology.from_dict(node.ontology.to_dict())
+    return node.ontology.model_copy(deep=True)
 
 
 async def run(description, model, dag_path):

@@ -4,7 +4,7 @@ import argparse
 import asyncio
 import json
 import sys
-from dataclasses import dataclass
+from pydantic import BaseModel
 
 from claude_agent_sdk import (
     ClaudeAgentOptions,
@@ -27,8 +27,7 @@ from python_agent.ontology import Decision, Ontology
 from python_agent.rules import convergence_system_prompt
 
 
-@dataclass
-class AgentState:
+class AgentState(BaseModel):
     """Mutable state for the convergence agent loop."""
 
     ontology: Ontology
@@ -63,7 +62,7 @@ def navigate_to_node(dag, node_id):
     if node is None:
         return None
     dag.current_node_id = node_id
-    return Ontology.from_dict(node.ontology.to_dict())
+    return node.ontology.model_copy(deep=True)
 
 
 def is_command(text):
@@ -113,9 +112,7 @@ def _handle_back_cmd(command, ontology, dag, dag_path):
     node = backtrack(dag)
     if node is None:
         return ("Already at root.", None, False)
-    new_onto = Ontology.from_dict(
-        node.ontology.to_dict(),
-    )
+    new_onto = node.ontology.model_copy(deep=True)
     save_dag(dag, dag_path)
     label = node.label or node.id
     msg = f"Backtracked to: {node.id} ({label})"
@@ -215,9 +212,7 @@ def _init_state(dag):
     node = dag.get_current_node()
     if node is None:
         return None
-    ontology = Ontology.from_dict(
-        node.ontology.to_dict(),
-    )
+    ontology = node.ontology.model_copy(deep=True)
     return AgentState(ontology=ontology)
 
 
@@ -257,7 +252,7 @@ async def run(dag_path, model):
     _print_status(state, dag)
 
     ontology_json = json.dumps(
-        state.ontology.to_dict(), indent=2,
+        state.ontology.model_dump(), indent=2,
     )
     children = get_children_summaries(
         dag, dag.current_node_id,

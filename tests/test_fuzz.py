@@ -308,11 +308,16 @@ def st_property():
     )
 
 
+_SAFE_ID = st.from_regex(
+    r"[a-zA-Z0-9_-]{1,20}", fullmatch=True,
+)
+
+
 def st_entity():
     """Strategy for Entity."""
     return st.builds(
         Entity,
-        id=st.text(min_size=1, max_size=10),
+        id=_SAFE_ID,
         name=st.text(min_size=1, max_size=20),
         description=st.text(max_size=50),
         properties=st.lists(st_property(), max_size=3),
@@ -377,28 +382,28 @@ class TestOntologyRoundTrip:
 
     @given(pt=st_property_type())
     def test_property_type(self, pt):
-        assert PropertyType.from_dict(pt.to_dict()) == pt
+        assert PropertyType.model_validate(pt.model_dump()) == pt
 
     @given(p=st_property())
     def test_property(self, p):
-        assert Property.from_dict(p.to_dict()) == p
+        assert Property.model_validate(p.model_dump()) == p
 
     @given(e=st_entity())
     def test_entity(self, e):
-        assert Entity.from_dict(e.to_dict()) == e
+        assert Entity.model_validate(e.model_dump()) == e
 
     @given(f=st_function_spec())
     def test_function_spec(self, f):
-        result = OntFunctionSpec.from_dict(f.to_dict())
+        result = OntFunctionSpec.model_validate(f.model_dump())
         assert result == f
 
     @given(o=st_ontology())
     def test_ontology(self, o):
-        assert Ontology.from_dict(o.to_dict()) == o
+        assert Ontology.model_validate(o.model_dump()) == o
 
     @given(d=st_decision())
     def test_decision(self, d):
-        assert Decision.from_dict(d.to_dict()) == d
+        assert Decision.model_validate(d.model_dump()) == d
 
     @given(
         o=st_ontology(),
@@ -411,7 +416,7 @@ class TestOntologyRoundTrip:
             created_at="2026-01-01T00:00:00Z",
             label=label,
         )
-        assert DAGNode.from_dict(node.to_dict()) == node
+        assert DAGNode.model_validate(node.model_dump()) == node
 
     @given(d=st_decision())
     def test_dag_edge(self, d):
@@ -421,7 +426,7 @@ class TestOntologyRoundTrip:
             decision=d,
             created_at="2026-01-01T00:00:00Z",
         )
-        assert DAGEdge.from_dict(edge.to_dict()) == edge
+        assert DAGEdge.model_validate(edge.model_dump()) == edge
 
     @given(o=st_ontology())
     def test_ontology_dag_json(self, o):

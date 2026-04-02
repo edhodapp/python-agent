@@ -106,7 +106,7 @@ def add_candidate_node(
     now = datetime.now(timezone.utc)
     node_id = now.strftime("%Y%m%dT%H%M%S%f")
     label = strategy.get("label", "candidate")
-    ontology = Ontology.from_dict(ontology_dict)
+    ontology = Ontology.model_validate(ontology_dict)
     node = DAGNode(
         id=node_id,
         ontology=ontology,
@@ -193,7 +193,7 @@ async def run(
         print("Error: DAG has no current node.")
         return 0
     ontology_json = json.dumps(
-        node.ontology.to_dict(), indent=2,
+        node.ontology.model_dump(), indent=2,
     )
     parent_id = dag.current_node_id
     total_cost = 0.0

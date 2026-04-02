@@ -36,7 +36,7 @@ def compute_hash(ontology_dict, key):
 def sign_node(node, key):
     """Set node.integrity_hash from ontology content."""
     node.integrity_hash = compute_hash(
-        node.ontology.to_dict(), key,
+        node.ontology.model_dump(), key,
     )
 
 
@@ -48,7 +48,7 @@ def verify_node(node, key):
     if not node.integrity_hash:
         return False
     expected = compute_hash(
-        node.ontology.to_dict(), key,
+        node.ontology.model_dump(), key,
     )
     return hmac.compare_digest(
         node.integrity_hash, expected,
