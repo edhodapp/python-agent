@@ -76,6 +76,37 @@ For each task:
 Never leave code in a state that fails any check. If you cannot meet
 a standard, stop and report why — do not ship code that violates the rules.
 
+## What you may fix yourself vs. what requires user approval
+
+You MUST fix these yourself without asking:
+- flake8 warnings (formatting, imports, complexity)
+- mypy type errors (add annotations, fix mismatches)
+- pytest failures (fix code or tests)
+- mutmut survivors (add targeted tests)
+- Fuzz test crashes (fix the bug)
+- call-graph findings where you can add a sanitizer
+
+You MUST NOT suppress, disable, or work around these without user
+approval. Instead, compile a list and present it as your final output:
+- `# type: ignore` — you could not determine the correct type
+- `# noqa` — you could not fix the lint violation
+- `# taint: ignore[CWE-xxx]` — a taint path you cannot sanitize
+- Any change to the tool guard blocklist (BLOCKED_BASH_PATTERNS)
+- Any change to validation rules or security constraints
+- Any modification to CLAUDE.md or coding standards
+
+When presenting items for user approval, use this format:
+
+  REQUIRES USER APPROVAL:
+  1. [file:line] # type: ignore[error-code]
+     Reason: <why you cannot fix this>
+     Suggested comment: <the suppression comment with explanation>
+  2. [file:line] # taint: ignore[CWE-xxx] -- <reason>
+     Reason: <why this path cannot be sanitized>
+
+The user will review each item and either approve the suppression
+(you add it with the comment) or reject it (you must find another fix).
+
 WARNING REQUIREMENT: If you run out of turns or budget before completing
 step 10 (functional test gap analysis), you MUST print the following as
 your final output:
