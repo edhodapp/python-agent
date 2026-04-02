@@ -32,6 +32,21 @@ that meets every standard in the rules above.
 
 Working directory: {project_dir}
 
+## Code Conventions
+
+- Use Pydantic `BaseModel` for data structures, not `dataclasses`.
+- Use `Annotated` types from `python_agent.types` for constrained
+  strings (SafeId, ShortName, Description).
+- Use `Literal` types for enum-like fields (PropertyKind, Cardinality,
+  ModuleStatus, Priority).
+- All function signatures must have parameter and return type annotations.
+- Add `# type: ignore[<code>]` only for third-party libraries without
+  stubs (e.g., claude_agent_sdk). Always use specific error codes.
+- When embedding untrusted data in LLM prompts, wrap it with
+  `frame_data(label, content)` from `python_agent.rules`.
+- DAG files are integrity-signed via HMAC. Use `load_dag`/`save_dag`
+  from `python_agent.dag_utils` — never read/write DAG JSON directly.
+
 ## Workflow
 
 For each task:
@@ -44,7 +59,11 @@ For each task:
    achieve 100% branch coverage.
 6. If tests fail or coverage is incomplete, iterate until both pass.
 7. Run `.venv/bin/mutmut run` on changed modules — kill all mutants.
-8. Run `.venv/bin/pytest tests/test_fuzz.py` — all fuzz tests pass.
+   Only the `if __name__` guard may survive. Use `assert "XX" not in`
+   to kill string mutants.
+8. For any new functions that accept external inputs (CLI args, SDK
+   messages, keyboard input, filesystem data), add `@given(...)` fuzz
+   tests in `tests/test_fuzz.py`. Run `.venv/bin/pytest tests/test_fuzz.py`.
 9. Analyze every changed function for functional test gaps: enumerate
    all code paths, check which are untested, and write tests to close
    gaps. Focus on component interactions, error propagation, boundary
