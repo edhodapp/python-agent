@@ -1,0 +1,52 @@
+name: Slow CI
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"  # Every Monday at 6am UTC
+  push:
+    tags: ["v*"]
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  fuzz:
+    name: Fuzz (CI profile)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[dev]"
+      - run: pytest tests/test_fuzz.py --hypothesis-profile=ci -v
+
+  mutmut:
+    name: Mutation Testing
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        module:
+          - coding_agent
+          - planning_agent
+          - discovery_agent
+          - divergence_agent
+          - convergence_agent
+          - ontology
+          - dag_utils
+          - dag_integrity
+          - tool_guard
+          - call_graph
+          - rules
+          - types
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[dev]" "mutmut<3"
+      - name: Run mutmut on ${{ matrix.module }}
+        run: |
+          mutmut run \
+            --paths-to-mutate=src/python_agent/${{ matrix.module }}.py \
+            --runner="python -m pytest" \
+            || true
+          mutmut results

@@ -1,5 +1,8 @@
 # python-agent
 
+[![CI](https://github.com/edhodapp/python-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/edhodapp/python-agent/actions/workflows/ci.yml)
+[![Slow CI](https://github.com/edhodapp/python-agent/actions/workflows/slow-ci.yml/badge.svg)](https://github.com/edhodapp/python-agent/actions/workflows/slow-ci.yml)
+
 Claude-powered Python agents with ontology-driven project planning,
 autonomous code generation, and defense-in-depth security hardening.
 
