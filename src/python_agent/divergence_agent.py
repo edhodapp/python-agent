@@ -1,10 +1,13 @@
 """Divergence agent: generates multiple solution candidates."""
 
+from __future__ import annotations
+
 import argparse
 import asyncio
 import json
 import re
 import sys
+from typing import Any
 
 from claude_agent_sdk import (
     AssistantMessage,
@@ -20,6 +23,7 @@ from python_agent.ontology import (
     DAGNode,
     Decision,
     Ontology,
+    OntologyDAG,
 )
 from python_agent.rules import (
     divergence_system_prompt,
@@ -37,27 +41,32 @@ _STRATEGIES_BLOCK_RE = re.compile(
 )
 
 
-def collect_response_text(message):
+def collect_response_text(message: Any) -> str:
     """Extract concatenated text from an AssistantMessage."""
-    parts = []
+    parts: list[str] = []
     for block in message.content:
         if isinstance(block, TextBlock):
             parts.append(block.text)
     return "\n".join(parts)
 
 
-def extract_ontology_json(text):
+def extract_ontology_json(
+    text: str,
+) -> dict[str, Any] | None:
     """Extract the first ontology JSON block from text."""
     match = _ONTOLOGY_BLOCK_RE.search(text)
     if match is None:
         return None
     try:
-        return json.loads(match.group(1))
+        result: dict[str, Any] = json.loads(match.group(1))
+        return result
     except json.JSONDecodeError:
         return None
 
 
-def extract_strategies(text):
+def extract_strategies(
+    text: str,
+) -> list[dict[str, Any]] | None:
     """Extract strategies JSON block from text.
 
     Returns a list of strategy dicts, or None.
@@ -74,9 +83,11 @@ def extract_strategies(text):
     return result
 
 
-async def run_query(task, options):
+async def run_query(
+    task: str, options: Any,
+) -> tuple[str, float]:
     """Run a single query. Return (response_text, cost)."""
-    parts = []
+    parts: list[str] = []
     cost = 0.0
     async for message in query(
         prompt=task, options=options,
@@ -88,7 +99,9 @@ async def run_query(task, options):
     return "\n".join(parts), cost
 
 
-def build_decision(strategy):
+def build_decision(
+    strategy: dict[str, Any],
+) -> Decision:
     """Create a Decision from a strategy dict."""
     return Decision(
         question=strategy.get("question", "architecture"),
@@ -99,13 +112,15 @@ def build_decision(strategy):
 
 
 def add_candidate_node(
-    dag, parent_id, ontology_dict, strategy,
-):
+    dag: OntologyDAG, parent_id: str,
+    ontology_dict: dict[str, Any],
+    strategy: dict[str, Any],
+) -> str:
     """Create a DAG node for a candidate and link it."""
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc)
     node_id = now.strftime("%Y%m%dT%H%M%S%f")
-    label = strategy.get("label", "candidate")
+    label: str = strategy.get("label", "candidate")
     ontology = Ontology.model_validate(ontology_dict)
     node = DAGNode(
         id=node_id,
@@ -124,7 +139,9 @@ def add_candidate_node(
     return node_id
 
 
-def remaining_budget(spent, max_budget):
+def remaining_budget(
+    spent: float, max_budget: float | None,
+) -> float | None:
     """Calculate remaining budget after spending."""
     if max_budget is None:
         return None
@@ -132,8 +149,9 @@ def remaining_budget(spent, max_budget):
 
 
 async def identify_strategies(
-    ontology_json, num_candidates, model, max_budget,
-):
+    ontology_json: str, num_candidates: int,
+    model: str, max_budget: float | None,
+) -> tuple[list[dict[str, Any]], float]:
     """Identify distinct architectural strategies."""
     prompt = strategy_system_prompt(
         ontology_json, num_candidates,
@@ -158,11 +176,12 @@ async def identify_strategies(
 
 
 async def generate_candidate(
-    ontology_json, strategy, model, max_budget,
-):
+    ontology_json: str, strategy: dict[str, Any],
+    model: str, max_budget: float | None,
+) -> tuple[dict[str, Any] | None, float]:
     """Generate one solution candidate for a strategy."""
-    label = strategy.get("label", "candidate")
-    description = strategy.get("strategy", "")
+    label: str = strategy.get("label", "candidate")
+    description: str = strategy.get("strategy", "")
     prompt = divergence_system_prompt(
         ontology_json, description,
     )
@@ -184,8 +203,9 @@ async def generate_candidate(
 
 
 async def run(
-    dag_file, num_candidates, model, max_budget,
-):
+    dag_file: str, num_candidates: int,
+    model: str, max_budget: float | None,
+) -> int:
     """Run the divergence agent. Returns candidate count."""
     dag = load_dag(dag_file, "unknown")
     node = dag.get_current_node()
@@ -216,13 +236,16 @@ async def run(
 
 
 async def _generate_all(
-    dag, parent_id, ontology_json, strategies,
-    model, total_cost, max_budget,
-):
+    dag: OntologyDAG, parent_id: str,
+    ontology_json: str,
+    strategies: list[dict[str, Any]],
+    model: str, total_cost: float,
+    max_budget: float | None,
+) -> int:
     """Generate all candidates and add to DAG."""
     generated = 0
     for strategy in strategies:
-        label = strategy.get("label", "candidate")
+        label: str = strategy.get("label", "candidate")
         print(f"Generating candidate: {label}...")
         budget = remaining_budget(total_cost, max_budget)
         result, cost = await generate_candidate(
@@ -242,7 +265,9 @@ async def _generate_all(
     return generated
 
 
-def parse_args(argv=None):
+def parse_args(
+    argv: list[str] | None = None,
+) -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
         description="Generate divergent solution candidates",
@@ -272,7 +297,7 @@ def parse_args(argv=None):
     return parser.parse_args(argv)
 
 
-def main(argv=None):
+def main(argv: list[str] | None = None) -> int:
     """Entry point for the divergence-agent CLI."""
     args = parse_args(argv)
     asyncio.run(

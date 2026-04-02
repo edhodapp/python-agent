@@ -1,8 +1,11 @@
 """Coding agent: writes Python code to production standards."""
 
+from __future__ import annotations
+
 import argparse
 import asyncio
 import sys
+from typing import Any
 
 from claude_agent_sdk import (
     AssistantMessage,
@@ -17,16 +20,18 @@ from python_agent.rules import coding_system_prompt
 ESCALATION_MODEL = "claude-opus-4-6"
 
 
-def print_text_blocks(message):
+def print_text_blocks(message: Any) -> None:
     """Print TextBlock content from an AssistantMessage."""
     for block in message.content:
         if isinstance(block, TextBlock):
             print(block.text)
 
 
-async def run_query(task, options):
+async def run_query(
+    task: str, options: Any,
+) -> Any:
     """Run a single query and return the ResultMessage."""
-    result = None
+    result: Any = None
     async for message in query(prompt=task, options=options):
         if isinstance(message, AssistantMessage):
             print_text_blocks(message)
@@ -37,7 +42,9 @@ async def run_query(task, options):
     return result
 
 
-def should_escalate(result, max_turns):
+def should_escalate(
+    result: Any, max_turns: int | None,
+) -> bool:
     """Decide whether to escalate to a stronger model."""
     if result is None:
         return False
@@ -48,16 +55,21 @@ def should_escalate(result, max_turns):
     return False
 
 
-def remaining_budget(result, max_budget):
+def remaining_budget(
+    result: Any, max_budget: float | None,
+) -> float | None:
     """Calculate remaining budget after a query."""
     if max_budget is None:
         return None
     if result is None or result.total_cost_usd is None:
         return max_budget
-    return max_budget - result.total_cost_usd
+    return float(max_budget - result.total_cost_usd)
 
 
-async def run(task, project_dir, model, max_turns, max_budget):
+async def run(
+    task: str, project_dir: str, model: str,
+    max_turns: int | None, max_budget: float | None,
+) -> None:
     """Run the coding agent on a task, escalating to Opus if stuck."""
     prompt = coding_system_prompt(project_dir)
     options = ClaudeAgentOptions(
@@ -92,7 +104,9 @@ async def run(task, project_dir, model, max_turns, max_budget):
     await run_query(escalation_task, escalation_options)
 
 
-def parse_args(argv=None):
+def parse_args(
+    argv: list[str] | None = None,
+) -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
         description="Run the Python coding agent on a task",
@@ -126,7 +140,7 @@ def parse_args(argv=None):
     return parser.parse_args(argv)
 
 
-def main(argv=None):
+def main(argv: list[str] | None = None) -> int:
     """Entry point for the coding-agent CLI."""
     args = parse_args(argv)
     asyncio.run(

@@ -1,5 +1,7 @@
 """Shared DAG persistence and snapshot utilities."""
 
+from __future__ import annotations
+
 import warnings
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,23 +15,28 @@ from python_agent.ontology import (
     DAGEdge,
     DAGNode,
     Decision,
+    Ontology,
     OntologyDAG,
 )
 
 
-def _default_key_path(dag_path):
+def _default_key_path(dag_path: str) -> str:
     """Derive key file path from DAG file path."""
     return str(Path(dag_path).parent / ".dag-key")
 
 
-def _sign_unsigned_nodes(dag, key):
+def _sign_unsigned_nodes(
+    dag: OntologyDAG, key: str,
+) -> None:
     """Sign all nodes missing an integrity hash."""
     for node in dag.nodes:
         if not node.integrity_hash:
             sign_node(node, key)
 
 
-def _verify_loaded_dag(dag, key_path):
+def _verify_loaded_dag(
+    dag: OntologyDAG, key_path: str,
+) -> None:
     """Verify all nodes and warn on failures."""
     try:
         key = load_or_create_key(key_path)
@@ -44,7 +51,7 @@ def _verify_loaded_dag(dag, key_path):
         )
 
 
-def _read_file(path):
+def _read_file(path: str) -> str | None:
     """Read file contents, or return None if not found."""
     try:
         with open(path) as f:
@@ -53,7 +60,7 @@ def _read_file(path):
         return None
 
 
-def _parse_dag(text):
+def _parse_dag(text: str) -> OntologyDAG | None:
     """Parse DAG JSON, or return None with warning."""
     try:
         return OntologyDAG.from_json(text)
@@ -65,7 +72,10 @@ def _parse_dag(text):
         return None
 
 
-def load_dag(path, project_name, key_path=None):
+def load_dag(
+    path: str, project_name: str,
+    key_path: str | None = None,
+) -> OntologyDAG:
     """Load an OntologyDAG from a JSON file.
 
     Returns a new empty DAG if not found or invalid.
@@ -82,7 +92,10 @@ def load_dag(path, project_name, key_path=None):
     return dag
 
 
-def save_dag(dag, path, key_path=None):
+def save_dag(
+    dag: OntologyDAG, path: str,
+    key_path: str | None = None,
+) -> None:
     """Save an OntologyDAG, signing unsigned nodes."""
     if key_path is None:
         key_path = _default_key_path(path)
@@ -92,13 +105,16 @@ def save_dag(dag, path, key_path=None):
         f.write(dag.to_json())
 
 
-def make_node_id():
+def make_node_id() -> str:
     """Generate a unique node ID from current timestamp."""
     now = datetime.now(timezone.utc)
     return now.strftime("%Y%m%dT%H%M%S%f")
 
 
-def save_snapshot(dag, ontology, label, decision=None):
+def save_snapshot(
+    dag: OntologyDAG, ontology: Ontology,
+    label: str, decision: Decision | None = None,
+) -> str:
     """Create a new DAG node from the current ontology.
 
     Links it as a child of the current node if one exists.

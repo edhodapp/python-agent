@@ -1,10 +1,13 @@
 """Discovery agent: interactive ontology building."""
 
+from __future__ import annotations
+
 import argparse
 import asyncio
 import json
 import re
 import sys
+from typing import Any
 
 from claude_agent_sdk import (
     AssistantMessage,
@@ -19,9 +22,11 @@ from python_agent.dag_utils import (
     save_snapshot,
 )
 from python_agent.ontology import (
+    DAGNode,
     DomainConstraint,
     Entity,
     Ontology,
+    OntologyDAG,
     OpenQuestion,
     Relationship,
 )
@@ -33,16 +38,18 @@ _ONTOLOGY_BLOCK_RE = re.compile(
 )
 
 
-def collect_response_text(message):
+def collect_response_text(message: Any) -> str:
     """Extract concatenated text from an AssistantMessage."""
-    parts = []
+    parts: list[str] = []
     for block in message.content:
         if isinstance(block, TextBlock):
             parts.append(block.text)
     return "\n".join(parts)
 
 
-def extract_ontology_json(text):
+def extract_ontology_json(
+    text: str,
+) -> dict[str, Any] | None:
     """Extract the first ontology JSON block from text.
 
     Returns the parsed dict, or None if no valid block found.
@@ -51,12 +58,15 @@ def extract_ontology_json(text):
     if match is None:
         return None
     try:
-        return json.loads(match.group(1))
+        result: dict[str, Any] = json.loads(match.group(1))
+        return result
     except json.JSONDecodeError:
         return None
 
 
-def _upsert_entities(ontology, new_entities):
+def _upsert_entities(
+    ontology: Ontology, new_entities: list[Any],
+) -> None:
     """Replace or append entities by id."""
     existing = {
         e.id: i for i, e in enumerate(ontology.entities)
@@ -73,7 +83,9 @@ def _upsert_entities(ontology, new_entities):
             ) - 1
 
 
-def _append_relationships(ontology, items):
+def _append_relationships(
+    ontology: Ontology, items: list[Any],
+) -> None:
     """Append new relationships to the ontology."""
     for item in items:
         ontology.relationships.append(
@@ -81,7 +93,9 @@ def _append_relationships(ontology, items):
         )
 
 
-def _append_constraints(ontology, items):
+def _append_constraints(
+    ontology: Ontology, items: list[Any],
+) -> None:
     """Append new domain constraints to the ontology."""
     for item in items:
         ontology.domain_constraints.append(
@@ -89,7 +103,9 @@ def _append_constraints(ontology, items):
         )
 
 
-def _upsert_open_questions(ontology, items):
+def _upsert_open_questions(
+    ontology: Ontology, items: list[Any],
+) -> None:
     """Replace or append open questions by id."""
     existing = {
         q.id: i
@@ -115,7 +131,9 @@ _MERGE_DISPATCH = {
 }
 
 
-def merge_ontology_update(ontology, update_dict):
+def merge_ontology_update(
+    ontology: Ontology, update_dict: dict[str, Any],
+) -> bool:
     """Apply a partial ontology update to an Ontology.
 
     Returns True if any updates were applied.
@@ -129,7 +147,9 @@ def merge_ontology_update(ontology, update_dict):
     return applied
 
 
-def process_response(response_text, ontology):
+def process_response(
+    response_text: str, ontology: Ontology,
+) -> bool:
     """Extract and apply ontology updates from response text.
 
     Returns True if an update was applied.
@@ -140,7 +160,7 @@ def process_response(response_text, ontology):
     return merge_ontology_update(ontology, update)
 
 
-def _format_entities(ontology):
+def _format_entities(ontology: Ontology) -> list[str]:
     """Format entity lines for summary."""
     lines = [f"Entities ({len(ontology.entities)}):"]
     for e in ontology.entities:
@@ -149,7 +169,9 @@ def _format_entities(ontology):
     return lines
 
 
-def _format_relationships(ontology):
+def _format_relationships(
+    ontology: Ontology,
+) -> list[str]:
     """Format relationship lines for summary."""
     lines = [
         f"Relationships ({len(ontology.relationships)}):",
@@ -162,7 +184,7 @@ def _format_relationships(ontology):
     return lines
 
 
-def _format_questions(ontology):
+def _format_questions(ontology: Ontology) -> list[str]:
     """Format open question lines for summary."""
     lines = [
         f"Open Questions ({len(ontology.open_questions)}):",
@@ -173,7 +195,7 @@ def _format_questions(ontology):
     return lines
 
 
-def format_ontology_summary(ontology):
+def format_ontology_summary(ontology: Ontology) -> str:
     """Format a human-readable summary of the ontology."""
     lines = _format_entities(ontology)
     lines += _format_relationships(ontology)
@@ -185,7 +207,7 @@ def format_ontology_summary(ontology):
     return "\n".join(lines)
 
 
-def backtrack(dag):
+def backtrack(dag: OntologyDAG) -> DAGNode | None:
     """Move to the parent of the current node.
 
     Returns the new current node, or None if at root.
@@ -197,12 +219,15 @@ def backtrack(dag):
     return dag.get_current_node()
 
 
-def _handle_show(ontology):
+def _handle_show(ontology: Ontology) -> str:
     """Handle the 'show' command."""
     return format_ontology_summary(ontology)
 
 
-def _handle_save(command, ontology, dag, dag_path):
+def _handle_save(
+    command: str, ontology: Ontology,
+    dag: OntologyDAG, dag_path: str,
+) -> str:
     """Handle the 'save' command."""
     label = command.strip()[4:].strip() or "snapshot"
     save_snapshot(dag, ontology, label)
@@ -210,7 +235,10 @@ def _handle_save(command, ontology, dag, dag_path):
     return f"Saved snapshot: {dag.current_node_id}"
 
 
-def _handle_back(ontology, dag, dag_path):
+def _handle_back(
+    ontology: Ontology, dag: OntologyDAG,
+    dag_path: str,
+) -> str:
     """Handle the 'back' command."""
     node = backtrack(dag)
     if node is None:
@@ -222,7 +250,7 @@ def _handle_back(ontology, dag, dag_path):
     return f"Backtracked to: {node.id} ({node.label})"
 
 
-def is_command(text):
+def is_command(text: str) -> bool:
     """Check if user input is a meta-command."""
     cmd = text.strip().lower()
     return cmd in ("show", "back") or cmd.startswith(
@@ -230,7 +258,10 @@ def is_command(text):
     )
 
 
-def handle_command(command, ontology, dag, dag_path):
+def handle_command(
+    command: str, ontology: Ontology,
+    dag: OntologyDAG, dag_path: str,
+) -> str:
     """Dispatch a user meta-command. Returns display string."""
     cmd = command.strip().lower()
     if cmd == "show":
@@ -240,16 +271,16 @@ def handle_command(command, ontology, dag, dag_path):
     return _handle_save(command, ontology, dag, dag_path)
 
 
-def print_text_blocks(message):
+def print_text_blocks(message: Any) -> None:
     """Print TextBlock content from an AssistantMessage."""
     for block in message.content:
         if isinstance(block, TextBlock):
             print(block.text)
 
 
-async def print_response(client):
+async def print_response(client: Any) -> str:
     """Receive and print response. Return full text."""
-    parts = []
+    parts: list[str] = []
     async for message in client.receive_response():
         if isinstance(message, AssistantMessage):
             print_text_blocks(message)
@@ -257,7 +288,7 @@ async def print_response(client):
     return "\n".join(parts)
 
 
-def read_user_input():
+def read_user_input() -> str | None:
     """Read a line from the user. Return None to quit."""
     try:
         user_input = input("\n> ")
@@ -271,7 +302,7 @@ def read_user_input():
     return user_input
 
 
-def _init_ontology(dag):
+def _init_ontology(dag: OntologyDAG) -> Ontology:
     """Get ontology from current DAG node, or a new one."""
     node = dag.get_current_node()
     if node is None:
@@ -279,7 +310,9 @@ def _init_ontology(dag):
     return node.ontology.model_copy(deep=True)
 
 
-async def run(description, model, dag_path):
+async def run(
+    description: str, model: str, dag_path: str,
+) -> None:
     """Run the discovery agent interactively."""
     prompt = discovery_system_prompt()
     dag = load_dag(dag_path, description)
@@ -312,7 +345,9 @@ async def run(description, model, dag_path):
             process_response(text, ontology)
 
 
-def parse_args(argv=None):
+def parse_args(
+    argv: list[str] | None = None,
+) -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
         description="Interactive ontology discovery agent",
@@ -335,7 +370,7 @@ def parse_args(argv=None):
     return parser.parse_args(argv)
 
 
-def main(argv=None):
+def main(argv: list[str] | None = None) -> int:
     """Entry point for the discovery-agent CLI."""
     args = parse_args(argv)
     asyncio.run(

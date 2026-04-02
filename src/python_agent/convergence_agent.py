@@ -1,9 +1,13 @@
 """Convergence agent: interactive candidate selection."""
 
+from __future__ import annotations
+
 import argparse
 import asyncio
 import json
 import sys
+from typing import Any
+
 from pydantic import BaseModel
 
 from claude_agent_sdk import (
@@ -23,7 +27,12 @@ from python_agent.discovery_agent import (
     process_response,
     read_user_input,
 )
-from python_agent.ontology import Decision, Ontology
+from python_agent.ontology import (
+    DAGNode,
+    Decision,
+    Ontology,
+    OntologyDAG,
+)
 from python_agent.rules import convergence_system_prompt
 
 
@@ -34,21 +43,25 @@ class AgentState(BaseModel):
     accepted: bool = False
 
 
-def get_children_summaries(dag, node_id):
+def get_children_summaries(
+    dag: OntologyDAG, node_id: str,
+) -> list[tuple[int, DAGNode, str]]:
     """Build list of (index, node, summary) for children."""
     children = dag.children_of(node_id)
-    result = []
+    result: list[tuple[int, DAGNode, str]] = []
     for i, child in enumerate(children, 1):
         summary = format_ontology_summary(child.ontology)
         result.append((i, child, summary))
     return result
 
 
-def format_children_list(children_summaries):
+def format_children_list(
+    children_summaries: list[tuple[int, DAGNode, str]],
+) -> str:
     """Format children summaries for display."""
     if not children_summaries:
         return "No candidates at this node."
-    lines = []
+    lines: list[str] = []
     for idx, child, summary in children_summaries:
         label = child.label or child.id
         first_line = summary.split("\n")[0]
@@ -56,7 +69,9 @@ def format_children_list(children_summaries):
     return "\n".join(lines)
 
 
-def navigate_to_node(dag, node_id):
+def navigate_to_node(
+    dag: OntologyDAG, node_id: str,
+) -> Ontology | None:
     """Set current_node_id and return the node's ontology."""
     node = dag.get_node(node_id)
     if node is None:
@@ -65,7 +80,7 @@ def navigate_to_node(dag, node_id):
     return node.ontology.model_copy(deep=True)
 
 
-def is_command(text):
+def is_command(text: str) -> bool:
     """Check if text is a convergence meta-command."""
     cmd = text.strip().lower()
     return (
@@ -75,7 +90,13 @@ def is_command(text):
     )
 
 
-def _handle_list_cmd(command, ontology, dag, dag_path):
+_CmdResult = tuple[str, Ontology | None, bool]
+
+
+def _handle_list_cmd(
+    command: str, ontology: Ontology,
+    dag: OntologyDAG, dag_path: str,
+) -> _CmdResult:
     """Handle 'list' command."""
     children = get_children_summaries(
         dag, dag.current_node_id,
@@ -83,12 +104,18 @@ def _handle_list_cmd(command, ontology, dag, dag_path):
     return (format_children_list(children), None, False)
 
 
-def _handle_show_cmd(command, ontology, dag, dag_path):
+def _handle_show_cmd(
+    command: str, ontology: Ontology,
+    dag: OntologyDAG, dag_path: str,
+) -> _CmdResult:
     """Handle 'show' command."""
     return (format_ontology_summary(ontology), None, False)
 
 
-def _handle_accept_cmd(command, ontology, dag, dag_path):
+def _handle_accept_cmd(
+    command: str, ontology: Ontology,
+    dag: OntologyDAG, dag_path: str,
+) -> _CmdResult:
     """Handle 'accept' command."""
     node = dag.get_current_node()
     label = node.label if node else "unknown"
@@ -107,7 +134,10 @@ def _handle_accept_cmd(command, ontology, dag, dag_path):
             None, True)
 
 
-def _handle_back_cmd(command, ontology, dag, dag_path):
+def _handle_back_cmd(
+    command: str, ontology: Ontology,
+    dag: OntologyDAG, dag_path: str,
+) -> _CmdResult:
     """Handle 'back' command."""
     node = backtrack(dag)
     if node is None:
@@ -119,7 +149,10 @@ def _handle_back_cmd(command, ontology, dag, dag_path):
     return (msg, new_onto, False)
 
 
-def _handle_select_cmd(command, ontology, dag, dag_path):
+def _handle_select_cmd(
+    command: str, ontology: Ontology,
+    dag: OntologyDAG, dag_path: str,
+) -> _CmdResult:
     """Handle 'select <n>' command."""
     parts = command.strip().split()
     if len(parts) < 2:
@@ -138,7 +171,10 @@ def _handle_select_cmd(command, ontology, dag, dag_path):
     return (f"Selected: {label}", new_onto, False)
 
 
-def _handle_save_cmd(command, ontology, dag, dag_path):
+def _handle_save_cmd(
+    command: str, ontology: Ontology,
+    dag: OntologyDAG, dag_path: str,
+) -> _CmdResult:
     """Handle 'save [label]' command."""
     label = command.strip()[4:].strip() or "snapshot"
     save_snapshot(dag, ontology, label)
@@ -149,7 +185,9 @@ def _handle_save_cmd(command, ontology, dag, dag_path):
     )
 
 
-_DISPATCH = {
+_CmdHandler = Any  # Callable signature for command handlers
+
+_DISPATCH: dict[str, _CmdHandler] = {
     "list": _handle_list_cmd,
     "show": _handle_show_cmd,
     "accept": _handle_accept_cmd,
@@ -157,7 +195,10 @@ _DISPATCH = {
 }
 
 
-def handle_command(command, ontology, dag, dag_path):
+def handle_command(
+    command: str, ontology: Ontology,
+    dag: OntologyDAG, dag_path: str,
+) -> _CmdResult:
     """Dispatch a convergence meta-command.
 
     Returns (message, new_ontology_or_None, is_accept).
@@ -165,7 +206,10 @@ def handle_command(command, ontology, dag, dag_path):
     cmd = command.strip().lower()
     handler = _DISPATCH.get(cmd)
     if handler is not None:
-        return handler(command, ontology, dag, dag_path)
+        result: _CmdResult = handler(
+            command, ontology, dag, dag_path,
+        )
+        return result
     if cmd.startswith("select "):
         return _handle_select_cmd(
             command, ontology, dag, dag_path,
@@ -175,7 +219,10 @@ def handle_command(command, ontology, dag, dag_path):
     )
 
 
-def dispatch_command(command, state, dag, dag_path):
+def dispatch_command(
+    command: str, state: AgentState,
+    dag: OntologyDAG, dag_path: str,
+) -> None:
     """Dispatch command and update agent state."""
     msg, new_onto, is_accept = handle_command(
         command, state.ontology, dag, dag_path,
@@ -187,13 +234,18 @@ def dispatch_command(command, state, dag, dag_path):
         state.accepted = True
 
 
-def maybe_process(text, state):
+def maybe_process(
+    text: str, state: AgentState,
+) -> None:
     """Apply ontology updates if accepted."""
     if state.accepted:
         process_response(text, state.ontology)
 
 
-def build_query(user_input, state, dag):
+def build_query(
+    user_input: str, state: AgentState,
+    dag: OntologyDAG,
+) -> str:
     """Build LLM query with current context."""
     from python_agent.rules import frame_data
     children = get_children_summaries(
@@ -207,7 +259,9 @@ def build_query(user_input, state, dag):
     return f"[Context: {framed}]\n\n{user_input}"
 
 
-def _init_state(dag):
+def _init_state(
+    dag: OntologyDAG,
+) -> AgentState | None:
     """Initialize agent state from DAG."""
     node = dag.get_current_node()
     if node is None:
@@ -216,7 +270,9 @@ def _init_state(dag):
     return AgentState(ontology=ontology)
 
 
-def _print_status(state, dag):
+def _print_status(
+    state: AgentState, dag: OntologyDAG,
+) -> None:
     """Print initial status."""
     print(format_ontology_summary(state.ontology))
     children = get_children_summaries(
@@ -225,7 +281,10 @@ def _print_status(state, dag):
     print(format_children_list(children))
 
 
-async def _main_loop(client, state, dag, dag_path):
+async def _main_loop(
+    client: Any, state: AgentState,
+    dag: OntologyDAG, dag_path: str,
+) -> None:
     """Run the interactive convergence loop."""
     while True:
         user_input = read_user_input()
@@ -236,13 +295,13 @@ async def _main_loop(client, state, dag, dag_path):
                 user_input, state, dag, dag_path,
             )
             continue
-        query = build_query(user_input, state, dag)
-        await client.query(query)
+        q = build_query(user_input, state, dag)
+        await client.query(q)
         text = await print_response(client)
         maybe_process(text, state)
 
 
-async def run(dag_path, model):
+async def run(dag_path: str, model: str) -> None:
     """Run the convergence agent interactively."""
     dag = load_dag(dag_path, "unknown")
     state = _init_state(dag)
@@ -271,7 +330,9 @@ async def run(dag_path, model):
         await _main_loop(client, state, dag, dag_path)
 
 
-def parse_args(argv=None):
+def parse_args(
+    argv: list[str] | None = None,
+) -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
         description="Interactive candidate convergence",
@@ -289,7 +350,7 @@ def parse_args(argv=None):
     return parser.parse_args(argv)
 
 
-def main(argv=None):
+def main(argv: list[str] | None = None) -> int:
     """Entry point for the convergence-agent CLI."""
     args = parse_args(argv)
     asyncio.run(run(args.dag_file, args.model))
