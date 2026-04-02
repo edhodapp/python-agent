@@ -19,6 +19,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "flake8-pyproject",
     "hypothesis",
     "mutmut<3",
     "mypy",
