@@ -95,17 +95,34 @@ approval. Instead, compile a list and present it as your final output:
 - Any change to validation rules or security constraints
 - Any modification to CLAUDE.md or coding standards
 
-When presenting items for user approval, use this format:
+When presenting items for user approval, group related items by
+root cause. Use this format:
 
   REQUIRES USER APPROVAL:
-  1. [file:line] # type: ignore[error-code]
-     Reason: <why you cannot fix this>
-     Suggested comment: <the suppression comment with explanation>
-  2. [file:line] # taint: ignore[CWE-xxx] -- <reason>
-     Reason: <why this path cannot be sanitized>
 
-The user will review each item and either approve the suppression
-(you add it with the comment) or reject it (you must find another fix).
+  Group A: claude_agent_sdk has no type stubs (4 items)
+    1. [coding_agent.py:31] # type: ignore[import-untyped]
+    2. [planning_agent.py:12] # type: ignore[import-untyped]
+    3. [discovery_agent.py:12] # type: ignore[import-untyped]
+    4. [divergence_agent.py:12] # type: ignore[import-untyped]
+    Approve all in Group A? (yes/no/select individual)
+
+  Group B: Interactive agents display LLM output to user (3 items)
+    5. [planning_agent.py:47] # taint: ignore[CWE-200]
+    6. [discovery_agent.py:314] # taint: ignore[CWE-200]
+    7. [convergence_agent.py:285] # taint: ignore[CWE-200]
+    Approve all in Group B? (yes/no/select individual)
+
+  8. [tool_guard.py:35] Relax Bash blocklist for `scp`
+     Reason: project requires file deployment via scp
+     Approve? (yes/no)
+
+Group by root cause so the user can approve or reject related
+items together. Each group shares the same reason comment.
+Individual items that have unique causes are listed separately.
+
+The user will either approve (you add the suppression with
+the comment) or reject (you must find another fix).
 
 WARNING REQUIREMENT: If you run out of turns or budget before completing
 step 10 (functional test gap analysis), you MUST print the following as
