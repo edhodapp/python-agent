@@ -590,6 +590,12 @@ class TestOntologyDAG:
         restored = OntologyDAG.from_json(dag.to_json())
         assert restored == dag
 
+    def test_to_json_indent(self):
+        dag = OntologyDAG(project_name="test")
+        j = dag.to_json()
+        assert "\n  " in j
+        assert "\n   " not in j
+
     def test_empty_dag(self):
         dag = OntologyDAG(project_name="empty")
         assert dag.nodes == []
@@ -740,3 +746,11 @@ class TestValidateOntologyStrict:
         data = {"open_questions": [{}]}
         errors = validate_ontology_strict(data)
         assert len(errors) > 0
+
+    def test_error_format(self):
+        data = {"entities": [{"name": "X"}]}
+        errors = validate_ontology_strict(data)
+        assert len(errors) > 0
+        assert "XX" not in errors[0]
+        for e in errors:
+            assert ": " in e

@@ -78,6 +78,12 @@ class TestComputeHash:
         assert len(h) == 64
         int(h, 16)
 
+    def test_key_order_independent(self):
+        key = generate_key()
+        d1 = {"z": 1, "a": 2}
+        d2 = {"a": 2, "z": 1}
+        assert compute_hash(d1, key) == compute_hash(d2, key)
+
 
 class TestSignNode:
     """Tests for sign_node."""
@@ -184,3 +190,26 @@ class TestVerifyDag:
             project_name="p", nodes=[n1],
         )
         assert verify_dag(dag, key) == []
+
+    def test_unsigned_then_tampered(self):
+        key = generate_key()
+        unsigned = DAGNode(
+            id="n1", ontology=Ontology(), created_at="t",
+        )
+        signed = DAGNode(
+            id="n2",
+            ontology=Ontology(
+                entities=[Entity(id="e1", name="X")],
+            ),
+            created_at="t",
+        )
+        sign_node(signed, key)
+        signed.ontology.entities[0] = Entity(
+            id="e1", name="TAMPERED",
+        )
+        dag = OntologyDAG(
+            project_name="p",
+            nodes=[unsigned, signed],
+        )
+        failed = verify_dag(dag, key)
+        assert failed == ["n2"]
