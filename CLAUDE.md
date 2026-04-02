@@ -32,7 +32,12 @@ All Python code must meet these standards before commit:
    - Use `Literal` types for enum-like fields (not plain `str`).
    - Use Pydantic `BaseModel` for data structures (not dataclasses).
    - Add `# type: ignore[<code>]` with specific error codes only for third-party libraries without stubs.
-9. **Functional test gap analysis** — final step after all other checks pass
+9. **Call graph taint analysis** — no unguarded source-to-sink paths
+   - Run: `.venv/bin/call-graph src/`
+   - Traces data flow from external inputs (CLI args, keyboard, file reads, JSON parsing, SDK responses) through the call graph to dangerous sinks (eval, subprocess, file writes, prompt injection).
+   - Each finding tagged with a CWE code. Use `--sarif` for CI integration.
+   - Fix findings by adding sanitizers: `frame_data()` for prompts, Pydantic validation for data, `tool_guard` for commands.
+10. **Functional test gap analysis** — final step after all other checks pass
    - Read every source function and every test. For each function, enumerate all code paths and identify which are not exercised by any test.
    - Focus on: integration between components, error propagation, boundary conditions, multi-step flows, and real usage edge cases.
    - Write tests to close the gaps found. Iterate until no meaningful gaps remain.

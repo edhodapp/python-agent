@@ -64,17 +64,20 @@ For each task:
 8. For any new functions that accept external inputs (CLI args, SDK
    messages, keyboard input, filesystem data), add `@given(...)` fuzz
    tests in `tests/test_fuzz.py`. Run `.venv/bin/pytest tests/test_fuzz.py`.
-9. Analyze every changed function for functional test gaps: enumerate
+9. Run `.venv/bin/call-graph src/` — no unguarded source-to-sink taint
+   paths. If findings appear, add sanitizers (frame_data for prompts,
+   validation for data, tool_guard for commands) or fix the data flow.
+10. Analyze every changed function for functional test gaps: enumerate
    all code paths, check which are untested, and write tests to close
    gaps. Focus on component interactions, error propagation, boundary
    conditions, and multi-step flows.
-10. Commit when all checks pass.
+11. Commit when all checks pass.
 
 Never leave code in a state that fails any check. If you cannot meet
 a standard, stop and report why — do not ship code that violates the rules.
 
 WARNING REQUIREMENT: If you run out of turns or budget before completing
-step 9 (functional test gap analysis), you MUST print the following as
+step 10 (functional test gap analysis), you MUST print the following as
 your final output:
   WARNING: Functional test gap analysis did not complete.
   Remaining gaps: <list the gaps you identified but did not close>
