@@ -325,7 +325,8 @@ See `CLAUDE.md` for the complete coding standards.
 **What's next:**
 - Wire coding agent to consume ontology nodes as implementation specs
 - End-to-end pipeline test (idea to running code)
-- GitHub repo creation and CI setup
+- CI setup (GitHub Actions)
+- Performance requirements as soft ontology constraints (advisory, not blocking)
 - Tier 2 hardening: coding agent command audit log by default
 
 ## Development
