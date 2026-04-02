@@ -442,3 +442,153 @@ class TestOntologyRoundTrip:
         )
         restored = OntologyDAG.from_json(dag.to_json())
         assert restored == dag
+
+
+# -- New agent + hardening fuzz tests --
+
+from python_agent.discovery_agent import (  # noqa: E402
+    extract_ontology_json as disc_extract,
+    parse_args as disc_parse_args,
+)
+from python_agent.divergence_agent import (  # noqa: E402
+    build_decision as div_build_decision,
+    extract_strategies as div_extract_strategies,
+    parse_args as div_parse_args,
+)
+from python_agent.convergence_agent import (  # noqa: E402
+    parse_args as conv_parse_args,
+)
+from python_agent.dag_integrity import (  # noqa: E402
+    compute_hash,
+    generate_key,
+)
+from python_agent.ontology import (  # noqa: E402
+    validate_ontology_strict,
+)
+from python_agent.rules import (  # noqa: E402
+    frame_data,
+)
+
+
+class TestDiscoveryExtractOntologyJson:
+    """Fuzz extract_ontology_json."""
+
+    @given(text=st.text(max_size=500))
+    def test_never_crashes(self, text):
+        result = disc_extract(text)
+        assert result is None or isinstance(result, dict)
+
+
+class TestDivergenceExtractStrategies:
+    """Fuzz extract_strategies."""
+
+    @given(text=st.text(max_size=500))
+    def test_never_crashes(self, text):
+        result = div_extract_strategies(text)
+        assert result is None or isinstance(result, list)
+
+
+class TestDivergenceBuildDecision:
+    """Fuzz build_decision."""
+
+    @given(data=st.dictionaries(
+        keys=st.text(max_size=20),
+        values=st.one_of(
+            st.text(max_size=50),
+            st.lists(st.text(max_size=20), max_size=3),
+        ),
+        max_size=5,
+    ))
+    def test_returns_decision(self, data):
+        result = div_build_decision(data)
+        assert isinstance(result.question, str)
+        assert isinstance(result.options, list)
+        assert isinstance(result.chosen, str)
+        assert isinstance(result.rationale, str)
+
+
+class TestDiscoveryParseArgs:
+    """Fuzz discovery_agent.parse_args."""
+
+    @given(argv=st_argv())
+    def test_no_unhandled_exception(self, argv):
+        try:
+            result = disc_parse_args(argv)
+            assert hasattr(result, "description")
+        except SystemExit:
+            pass
+
+
+class TestDivergenceParseArgs:
+    """Fuzz divergence_agent.parse_args."""
+
+    @given(argv=st_argv())
+    def test_no_unhandled_exception(self, argv):
+        try:
+            result = div_parse_args(argv)
+            assert hasattr(result, "dag_file")
+        except SystemExit:
+            pass
+
+
+class TestConvergenceParseArgs:
+    """Fuzz convergence_agent.parse_args."""
+
+    @given(argv=st_argv())
+    def test_no_unhandled_exception(self, argv):
+        try:
+            result = conv_parse_args(argv)
+            assert hasattr(result, "dag_file")
+        except SystemExit:
+            pass
+
+
+class TestFrameData:
+    """Fuzz frame_data."""
+
+    @given(
+        label=st.text(min_size=1, max_size=30),
+        content=st.text(max_size=500),
+    )
+    def test_content_enclosed(self, label, content):
+        result = frame_data(label, content)
+        assert content in result
+        assert f"<{label}>" in result
+        assert f"</{label}>" in result
+
+
+class TestValidateOntologyStrictFuzz:
+    """Fuzz validate_ontology_strict."""
+
+    @given(data=st.dictionaries(
+        keys=st.text(max_size=20),
+        values=st.one_of(
+            st.text(max_size=50),
+            st.integers(),
+            st.lists(st.text(max_size=10), max_size=3),
+        ),
+        max_size=10,
+    ))
+    def test_never_crashes(self, data):
+        errors = validate_ontology_strict(data)
+        assert isinstance(errors, list)
+        for e in errors:
+            assert isinstance(e, str)
+
+
+class TestComputeHashFuzz:
+    """Fuzz compute_hash."""
+
+    @given(data=st.dictionaries(
+        keys=st.text(min_size=1, max_size=20),
+        values=st.one_of(
+            st.text(max_size=50),
+            st.integers(),
+        ),
+        max_size=5,
+    ))
+    def test_returns_hex(self, data):
+        key = generate_key()
+        result = compute_hash(data, key)
+        assert isinstance(result, str)
+        assert len(result) == 64
