@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
+from collections.abc import AsyncIterator
 from typing import Any
 
 from claude_agent_sdk import (
@@ -22,12 +23,24 @@ from python_agent.tool_guard import make_tool_guard
 ESCALATION_MODEL = "claude-opus-4-6"
 
 
+async def _prompt_stream(
+    text: str,
+) -> AsyncIterator[dict[str, Any]]:
+    """Wrap a string prompt as an async iterable.
+
+    Required by claude_agent_sdk when can_use_tool is set.
+    """
+    yield {"role": "user", "content": text}
+
+
 async def run_query(
     task: str, options: Any,
 ) -> Any:
     """Run a single query and return the ResultMessage."""
     result: Any = None
-    async for message in query(prompt=task, options=options):
+    async for message in query(
+        prompt=_prompt_stream(task), options=options,
+    ):
         if isinstance(message, AssistantMessage):
             print_text_blocks(message)
         elif isinstance(message, ResultMessage):
