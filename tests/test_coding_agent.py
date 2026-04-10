@@ -6,6 +6,7 @@ import pytest
 
 from python_agent.coding_agent import (
     ESCALATION_MODEL,
+    _load_ontology_json,
     main,
     parse_args,
     print_text_blocks,
@@ -308,6 +309,88 @@ class TestRun:
         assert opts.system_prompt is not None
 
 
+class TestLoadOntologyJson:
+    """Tests for _load_ontology_json()."""
+
+    def test_none_dag_file_returns_none(self):
+        assert _load_ontology_json(None) is None
+
+    def test_valid_dag_file_returns_json(self, tmp_path):
+        from python_agent.dag_utils import save_dag, save_snapshot
+        from python_agent.ontology import Entity, Ontology, OntologyDAG
+
+        ontology = Ontology(
+            entities=[Entity(id="test-e", name="TestEntity")],
+        )
+        dag = OntologyDAG(project_name="test")
+        save_snapshot(dag, ontology, "initial")
+        dag_path = str(tmp_path / "test.json")
+        save_dag(dag, dag_path)
+
+        result = _load_ontology_json(dag_path)
+        assert result is not None
+        assert "test-e" in result
+        assert "TestEntity" in result
+
+    def test_empty_dag_returns_none(self, tmp_path):
+        from python_agent.dag_utils import save_dag
+        from python_agent.ontology import OntologyDAG
+
+        dag = OntologyDAG(project_name="empty")
+        dag_path = str(tmp_path / "empty.json")
+        save_dag(dag, dag_path)
+
+        assert _load_ontology_json(dag_path) is None
+
+    def test_missing_file_returns_none(self):
+        assert _load_ontology_json("/no/such/file.json") is None
+
+
+class TestRunWithDagFile:
+    """Tests for run() with dag_file parameter."""
+
+    @pytest.mark.asyncio
+    async def test_dag_file_adds_ontology_to_prompt(self, tmp_path):
+        from python_agent.dag_utils import save_dag, save_snapshot
+        from python_agent.ontology import Entity, Ontology, OntologyDAG
+
+        ontology = Ontology(
+            entities=[Entity(id="my-ent", name="MyEntity")],
+        )
+        dag = OntologyDAG(project_name="test")
+        save_snapshot(dag, ontology, "initial")
+        dag_path = str(tmp_path / "test.json")
+        save_dag(dag, dag_path)
+
+        result = MagicMock(
+            is_error=False, num_turns=5, total_cost_usd=0.01,
+        )
+        mock_rq = AsyncMock(return_value=result)
+        with patch("python_agent.coding_agent.run_query", mock_rq):
+            await run(
+                "task", "/proj", "claude-sonnet-4-6",
+                10, 5.0, dag_file=dag_path,
+            )
+        opts = mock_rq.call_args_list[0][0][1]
+        assert "my-ent" in opts.system_prompt
+        assert "MyEntity" in opts.system_prompt
+        assert "ontology-data" in opts.system_prompt
+
+    @pytest.mark.asyncio
+    async def test_no_dag_file_no_ontology_in_prompt(self):
+        result = MagicMock(
+            is_error=False, num_turns=5, total_cost_usd=0.01,
+        )
+        mock_rq = AsyncMock(return_value=result)
+        with patch("python_agent.coding_agent.run_query", mock_rq):
+            await run(
+                "task", "/proj", "claude-sonnet-4-6",
+                10, 5.0, dag_file=None,
+            )
+        opts = mock_rq.call_args_list[0][0][1]
+        assert "ontology-data" not in opts.system_prompt
+
+
 class TestParseArgs:
     """Tests for parse_args()."""
 
@@ -351,6 +434,14 @@ class TestParseArgs:
         args = parse_args(["--max-budget", "2.5", "task"])
         assert args.max_budget == 2.5
 
+    def test_default_dag_file(self):
+        args = parse_args(["task"])
+        assert args.dag_file is None
+
+    def test_custom_dag_file(self):
+        args = parse_args(["--dag-file", "design.json", "task"])
+        assert args.dag_file == "design.json"
+
     def test_help_text(self, capsys):
         with pytest.raises(SystemExit):
             parse_args(["--help"])
@@ -362,6 +453,7 @@ class TestParseArgs:
         assert "Model to use" in out
         assert "Maximum agent turns" in out
         assert "Maximum budget in USD" in out
+        assert "ontology DAG JSON" in out
 
 
 class TestMain:

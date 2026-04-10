@@ -63,6 +63,26 @@ class TestCodingSystemPrompt:
         result = coding_system_prompt("/home/user/proj")
         assert "/home/user/proj/.venv/" in result
 
+    def test_no_ontology_by_default(self):
+        result = coding_system_prompt("/tmp/proj")
+        assert "ontology-data" not in result
+
+    def test_includes_ontology_when_provided(self):
+        result = coding_system_prompt(
+            "/tmp/proj",
+            ontology_json='{"entities": []}',
+        )
+        assert "ontology-data" in result
+        assert '{"entities": []}' in result
+        assert "Design Specification" in result
+
+    def test_ontology_none_same_as_default(self):
+        without = coding_system_prompt("/tmp/proj")
+        with_none = coding_system_prompt(
+            "/tmp/proj", ontology_json=None,
+        )
+        assert without == with_none
+
 
 class TestPlanningSystemPrompt:
     """Tests for planning_system_prompt()."""

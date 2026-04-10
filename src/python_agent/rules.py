@@ -20,9 +20,25 @@ def load_rules() -> str:
     return rules_path.read_text(encoding="utf-8")
 
 
-def coding_system_prompt(project_dir: str) -> str:
+def coding_system_prompt(
+    project_dir: str,
+    ontology_json: str | None = None,
+) -> str:
     """Build the system prompt for the coding agent."""
     rules = load_rules()
+    ontology_section = ""
+    if ontology_json is not None:
+        framed = frame_data("ontology-data", ontology_json)
+        ontology_section = f"""
+
+## Design Specification (Ontology)
+
+The following ontology describes the design for this task.
+Use it to understand entities, relationships, module specs,
+function signatures, and test strategies.
+
+{framed}
+"""
     return f"""{rules}
 
 ## Agent Role: Coding Agent
@@ -31,6 +47,7 @@ You are a Python coding agent. You write production-quality Python code
 that meets every standard in the rules above.
 
 Working directory: {project_dir}
+{ontology_section}
 
 ## Code Conventions
 

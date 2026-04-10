@@ -190,8 +190,12 @@ everything passes. Starts with Sonnet for cost efficiency; automatically
 escalates to Opus if it gets stuck.
 
 ```bash
-coding-agent "Implement the URL shortener from the accepted design" -d ./shortener
+coding-agent "Implement the URL shortener from the accepted design" -d ./shortener --dag-file shortener.json
 ```
+
+Pass `--dag-file` to give the coding agent the ontology as structured design
+context. The agent sees entities, module specs, function signatures, and test
+strategies from the accepted design.
 
 The agent's workflow (11 steps):
 1. Read existing code
@@ -215,6 +219,7 @@ Options:
 - `-m MODEL` -- initial model (default: `claude-sonnet-4-6`)
 - `--max-turns N` -- step limit (default: 30)
 - `--max-budget USD` -- spending cap (default: 5.0)
+- `--dag-file PATH` -- ontology DAG JSON file for design context (optional)
 
 ### Backtracking
 

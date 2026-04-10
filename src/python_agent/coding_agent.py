@@ -15,6 +15,7 @@ from claude_agent_sdk import (
 )
 
 from python_agent.agent_utils import print_text_blocks
+from python_agent.dag_utils import load_dag
 from python_agent.rules import coding_system_prompt
 from python_agent.tool_guard import make_tool_guard
 
@@ -60,12 +61,29 @@ def remaining_budget(
     return float(max_budget - result.total_cost_usd)
 
 
+def _load_ontology_json(
+    dag_file: str | None,
+) -> str | None:
+    """Load ontology JSON from a DAG file, if provided."""
+    if dag_file is None:
+        return None
+    dag = load_dag(dag_file, project_name="")
+    node = dag.get_current_node()
+    if node is None:
+        return None
+    return node.ontology.model_dump_json(indent=2)
+
+
 async def run(
     task: str, project_dir: str, model: str,
     max_turns: int | None, max_budget: float | None,
+    dag_file: str | None = None,
 ) -> None:
     """Run the coding agent on a task, escalating to Opus if stuck."""
-    prompt = coding_system_prompt(project_dir)
+    ontology_json = _load_ontology_json(dag_file)
+    prompt = coding_system_prompt(
+        project_dir, ontology_json=ontology_json,
+    )
     guard = make_tool_guard(project_dir)
     options = ClaudeAgentOptions(
         model=model,
@@ -134,6 +152,11 @@ def parse_args(
         default=5.0,
         help="Maximum budget in USD (default: 5.0)",
     )
+    parser.add_argument(
+        "--dag-file",
+        default=None,
+        help="Path to ontology DAG JSON file for design context",
+    )
     return parser.parse_args(argv)
 
 
@@ -147,6 +170,7 @@ def main(argv: list[str] | None = None) -> int:
             args.model,
             args.max_turns,
             args.max_budget,
+            dag_file=args.dag_file,
         )
     )
     return 0
