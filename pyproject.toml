@@ -46,7 +46,7 @@ Repository = "https://github.com/edhodapp/python-agent"
 where = ["src"]
 
 [tool.setuptools.package-data]
-python_agent = ["CLAUDE.md"]
+python_agent = ["CLAUDE.md", "py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
