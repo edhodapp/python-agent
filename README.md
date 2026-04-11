@@ -1,4 +1,4 @@
-# python-agent
+# aofire-python-agent
 
 [![Lint](https://github.com/edhodapp/python-agent/actions/workflows/lint.yml/badge.svg)](https://github.com/edhodapp/python-agent/actions/workflows/lint.yml)
 [![Type Check](https://github.com/edhodapp/python-agent/actions/workflows/typecheck.yml/badge.svg)](https://github.com/edhodapp/python-agent/actions/workflows/typecheck.yml)
@@ -45,7 +45,7 @@ Plus shared infrastructure:
 ## Install
 
 ```bash
-pip install python-agent
+pip install aofire-python-agent
 ```
 
 For development (includes test/analysis tools):
@@ -372,7 +372,7 @@ devpi use myuser/dev
 devpi upload
 
 # Install from local index
-pip install python-agent -i http://localhost:3141/myuser/dev/+simple/
+pip install aofire-python-agent -i http://localhost:3141/myuser/dev/+simple/
 ```
 
 ## License

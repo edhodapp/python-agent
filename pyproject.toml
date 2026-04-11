@@ -3,7 +3,7 @@ requires = ["setuptools>=68.0", "setuptools-scm>=8.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "python-agent"
+name = "aofire-python-agent"
 version = "0.1.0"
 description = "Claude-powered Python coding and planning agents with enforced quality standards"
 readme = "README.md"
