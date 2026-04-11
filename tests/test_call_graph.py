@@ -1057,3 +1057,250 @@ class TestBfsCycleHandling:
         result = _bfs_to_sinks("a", fwd, sinks, g)
         # d is reached first via a->b->d; second path a->c->d is skipped
         assert len(result) == 1
+
+
+# -----------------------------------------------------------------------
+# Regression tests for issue #2:
+# Class-scoped FQNs must distinguish methods of different classes.
+# https://github.com/edhodapp/python-agent/issues/2
+# -----------------------------------------------------------------------
+
+
+class TestClassScopedFQN:
+    """Regression tests for issue #2."""
+
+    def test_two_classes_same_method_name(
+        self, tmp_path: Any,
+    ) -> None:
+        """Methods in different classes produce distinct FQN keys.
+
+        Before the fix, both Handler.run and Logger.run collapsed to
+        `mod.run`, so one overwrote the other in graph.functions.
+        """
+        src = textwrap.dedent("""\
+            class Handler:
+                def run(self, payload):
+                    eval(payload)
+
+            class Logger:
+                def run(self, message):
+                    pass
+        """)
+        p = tmp_path / "mod.py"
+        p.write_text(src)
+        funcs, _edges, _supps = parse_file(str(p), "mod")
+        names = {f.name for f in funcs}
+        assert "mod.Handler.run" in names
+        assert "mod.Logger.run" in names
+        handler_run = next(
+            f for f in funcs if f.name == "mod.Handler.run"
+        )
+        assert handler_run.is_sink is True
+        assert handler_run.sink_cwe == "CWE-94"
+        logger_run = next(
+            f for f in funcs if f.name == "mod.Logger.run"
+        )
+        assert logger_run.is_sink is False
+
+    def test_nested_class_contributes_to_fqn(
+        self, tmp_path: Any,
+    ) -> None:
+        """Nested classes prefix their methods' FQNs."""
+        src = textwrap.dedent("""\
+            class Outer:
+                class Inner:
+                    def method(self):
+                        pass
+        """)
+        p = tmp_path / "nested.py"
+        p.write_text(src)
+        funcs, _edges, _supps = parse_file(str(p), "nested")
+        names = {f.name for f in funcs}
+        assert "nested.Outer.Inner.method" in names
+
+    def test_top_level_function_fqn_unchanged(
+        self, tmp_path: Any,
+    ) -> None:
+        """Top-level functions keep their module-only FQN."""
+        src = textwrap.dedent("""\
+            def standalone():
+                pass
+        """)
+        p = tmp_path / "top.py"
+        p.write_text(src)
+        funcs, _edges, _supps = parse_file(str(p), "top")
+        names = {f.name for f in funcs}
+        assert "top.standalone" in names
+        assert not any("top.." in n for n in names)
+
+    def test_class_method_edge_caller_is_class_scoped(
+        self, tmp_path: Any,
+    ) -> None:
+        """Edges from class methods use the class-scoped caller FQN.
+
+        Also verifies the class stack is popped correctly: a top-level
+        function defined AFTER a class must not inherit the class in
+        its FQN. A mutmut mutation that drops the pop would cause
+        `helper` to become `e.Handler.helper` here.
+        """
+        src = textwrap.dedent("""\
+            class Handler:
+                def run(self, payload):
+                    helper()
+
+            def helper():
+                pass
+        """)
+        p = tmp_path / "e.py"
+        p.write_text(src)
+        funcs, edges, _supps = parse_file(str(p), "e")
+        assert any(
+            e.caller == "e.Handler.run" and e.callee == "e.helper"
+            for e in edges
+        )
+        assert not any(e.caller == "e.run" for e in edges)
+        # Stack-pop correctness: helper() is top-level, not a class member.
+        names = {f.name for f in funcs}
+        assert "e.helper" in names
+        assert "e.Handler.helper" not in names
+
+    def test_async_method_in_class(
+        self, tmp_path: Any,
+    ) -> None:
+        """Async methods inside a class get class-scoped FQN."""
+        src = textwrap.dedent("""\
+            class Runner:
+                async def go(self):
+                    pass
+        """)
+        p = tmp_path / "am.py"
+        p.write_text(src)
+        funcs, _edges, _supps = parse_file(str(p), "am")
+        names = {f.name for f in funcs}
+        assert "am.Runner.go" in names
+        assert "am.go" not in names
+
+    def test_suppression_on_class_method_binds_to_class_fqn(
+        self, tmp_path: Any,
+    ) -> None:
+        """# taint: ignore[...] on a class method binds to the class-scoped FQN.
+
+        Regression for the MEDIUM finding raised during review of the
+        #2 fix: before the suppression path was made class-aware, a
+        # taint: ignore comment on a class method produced a Suppression
+        with function="mod.method_name" which no longer matched the
+        class-scoped function FQN "mod.Class.method_name", so
+        suppressions on class methods silently stopped working.
+        """
+        src = textwrap.dedent("""\
+            class Api:
+                # taint: ignore[CWE-200] -- LLM output is trusted here
+                def display(self, text):
+                    print(text)
+        """)
+        p = tmp_path / "api.py"
+        p.write_text(src)
+        _funcs, _edges, supps = parse_file(str(p), "api")
+        assert len(supps) == 1
+        assert supps[0].function == "api.Api.display"
+        assert supps[0].cwe == "CWE-200"
+        assert "LLM output" in supps[0].reason
+
+    def test_suppression_on_free_function_still_works(
+        self, tmp_path: Any,
+    ) -> None:
+        """Regression guard: free-function suppressions still bind to `mod.func`."""
+        src = textwrap.dedent("""\
+            # taint: ignore[CWE-94] -- developer-only tool
+            def eval_helper(x):
+                eval(x)
+        """)
+        p = tmp_path / "ff.py"
+        p.write_text(src)
+        _funcs, _edges, supps = parse_file(str(p), "ff")
+        assert len(supps) == 1
+        assert supps[0].function == "ff.eval_helper"
+        assert supps[0].cwe == "CWE-94"
+
+    def test_suppression_inline_on_def_line(
+        self, tmp_path: Any,
+    ) -> None:
+        """Suppression comment inline on the def line binds correctly.
+
+        Exercises the `i + 1` branch of
+        `line_to_fqn.get(i + 1) or line_to_fqn.get(i + 2)` — without
+        this, a mutmut mutation swapping `or` for `and` (or dropping
+        the first lookup) survives because the other suppression
+        tests use only the `i + 2` (comment-one-line-before-def)
+        branch.
+        """
+        src = textwrap.dedent("""\
+            def run_eval():  # taint: ignore[CWE-94] -- inline
+                eval("")
+        """)
+        p = tmp_path / "inline.py"
+        p.write_text(src)
+        _funcs, _edges, supps = parse_file(str(p), "inline")
+        assert len(supps) == 1
+        assert supps[0].function == "inline.run_eval"
+        assert supps[0].cwe == "CWE-94"
+        assert "inline" in supps[0].reason
+
+    def test_orphan_suppression_comment_is_dropped(
+        self, tmp_path: Any,
+    ) -> None:
+        """A `# taint: ignore[...]` with no following def contributes no Suppression.
+
+        Covers the branch in _collect_suppressions where the line_to_fqn
+        lookup returns no FQN for the comment's line (or line + 1).
+        """
+        src = textwrap.dedent("""\
+            # taint: ignore[CWE-94] -- attached to nothing
+            x = 42
+        """)
+        p = tmp_path / "orphan.py"
+        p.write_text(src)
+        _funcs, _edges, supps = parse_file(str(p), "orphan")
+        assert supps == []
+
+    def test_suppressed_taint_paths_skipped_in_default_report(
+        self, tmp_path: Any,
+    ) -> None:
+        """End-to-end: two suppressed source-to-sink paths, different CWEs.
+
+        Two distinct paths with distinct CWE suppressions — when
+        checking the second path's suppression list, the first
+        suppression in the list does NOT match (different CWE),
+        forcing the loop to `continue` past it. That exercises the
+        `_check_suppressed` continue-branch (547->546) in addition
+        to the positive-match branch and the `_should_skip`
+        `tp.suppressed=True` branch.
+        """
+        src = textwrap.dedent("""\
+            # taint: ignore[CWE-78] -- shell access is intentional here
+            def run_shell():
+                cmd = input()
+                shell_runner(cmd)
+
+            def shell_runner(cmd):
+                os.system(cmd)
+
+            # taint: ignore[CWE-94] -- developer-only eval tool
+            def read_user_code():
+                code = input()
+                evaluator(code)
+
+            def evaluator(code):
+                eval(code)
+        """)
+        (tmp_path / "ev.py").write_text(src)
+        graph = build_graph(str(tmp_path))
+        paths = find_taint_paths(graph)
+        assert len(paths) == 2
+        for p in paths:
+            assert p.suppressed is True
+        cwes = {p.cwe for p in paths}
+        assert cwes == {"CWE-78", "CWE-94"}
+        # Default report hides suppressed paths entirely.
+        report = format_text_report(paths)
+        assert report == "No taint paths found."

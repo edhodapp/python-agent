@@ -207,6 +207,20 @@ def _classify_as_sink(
 # AST visitors
 # ---------------------------------------------------------------------------
 
+def _make_fqn(
+    module: str, class_stack: list[str], name: str,
+) -> str:
+    """Build a class-scoped fully qualified name.
+
+    Returns `mod.Outer.Inner.method` for nested class methods and
+    `mod.func` for top-level functions. Issue #2 regression guard.
+    """
+    if class_stack:
+        prefix = ".".join(class_stack)
+        return f"{module}.{prefix}.{name}"
+    return f"{module}.{name}"
+
+
 class _ImportCollector(ast.NodeVisitor):
     """Collect import aliases from a module AST."""
 
@@ -231,9 +245,19 @@ class _FunctionVisitor(ast.NodeVisitor):
     def __init__(self, module: str) -> None:
         self.module = module
         self.functions: list[FunctionInfo] = []
+        self.line_to_fqn: dict[int, str] = {}
+        self._class_stack: list[str] = []
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self._class_stack.append(node.name)
+        try:
+            self.generic_visit(node)
+        finally:
+            self._class_stack.pop()
 
     def _visit_func(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
-        fqn = f"{self.module}.{node.name}"
+        fqn = _make_fqn(self.module, self._class_stack, node.name)
+        self.line_to_fqn[node.lineno] = fqn
         calls = _collect_calls_in_body(node.body)
         is_src, src_cwe = _classify_as_source(calls)
         is_snk, snk_cwe = _classify_as_sink(calls)
@@ -267,10 +291,20 @@ class _CallVisitor(ast.NodeVisitor):
         self.imports = imports
         self.edges: list[CallEdge] = []
         self._current_func: str | None = None
+        self._class_stack: list[str] = []
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self._class_stack.append(node.name)
+        try:
+            self.generic_visit(node)
+        finally:
+            self._class_stack.pop()
 
     def _visit_func(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         old = self._current_func
-        self._current_func = f"{self.module}.{node.name}"
+        self._current_func = _make_fqn(
+            self.module, self._class_stack, node.name,
+        )
         self.generic_visit(node)
         self._current_func = old
 
@@ -341,12 +375,17 @@ def _collect_python_files(root: str) -> list[str]:
 
 
 def _collect_suppressions(
-    source: str, module_name: str,
+    source: str, line_to_fqn: dict[int, str],
 ) -> list[Suppression]:
     """Scan source for taint suppression comments.
 
     Format: # taint: ignore[CWE-200] -- reason text
     Can appear on a def line or the line immediately before.
+
+    The target function's FQN is resolved from *line_to_fqn*, which
+    is populated by _FunctionVisitor and carries class context. This
+    makes suppressions bind correctly to class methods (issue #2
+    follow-up: binding was previously text-based and ignored classes).
     """
     lines = source.splitlines()
     results: list[Suppression] = []
@@ -354,43 +393,15 @@ def _collect_suppressions(
         match = _SUPPRESS_RE.search(line)
         if match is None:
             continue
-        cwe = match.group(1)
-        reason = match.group(2).strip()
-        func_name = _find_func_for_suppress(lines, i)
-        if func_name:
-            fqn = f"{module_name}.{func_name}"
+        fqn = line_to_fqn.get(i + 1) or line_to_fqn.get(i + 2)
+        if fqn:
             results.append(Suppression(
-                function=fqn, cwe=cwe,
-                reason=reason, lineno=i + 1,
+                function=fqn,
+                cwe=match.group(1),
+                reason=match.group(2).strip(),
+                lineno=i + 1,
             ))
     return results
-
-
-def _find_func_for_suppress(
-    lines: list[str], comment_idx: int,
-) -> str:
-    """Find the function name for a suppression comment.
-
-    Checks the comment line itself and the next line.
-    """
-    name = _extract_func_name(lines[comment_idx])
-    if name:
-        return name
-    if comment_idx + 1 < len(lines):
-        return _extract_func_name(lines[comment_idx + 1])
-    return ""
-
-
-def _extract_func_name(line: str) -> str:
-    """Extract function name from a def line."""
-    stripped = line.strip()
-    for prefix in ("async def ", "def "):
-        if stripped.startswith(prefix):
-            rest = stripped[len(prefix):]
-            paren = rest.find("(")
-            if paren > 0:
-                return rest[:paren]
-    return ""
 
 
 def parse_file(
@@ -419,7 +430,7 @@ def parse_file(
     fv.visit(tree)
     cv = _CallVisitor(module_name, imports)
     cv.visit(tree)
-    supps = _collect_suppressions(source, module_name)
+    supps = _collect_suppressions(source, fv.line_to_fqn)
     return fv.functions, cv.edges, supps
 
 
