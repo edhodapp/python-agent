@@ -111,21 +111,31 @@ class TestIsSourceCall:
     def test_exact_open(self) -> None:
         assert _is_source_call("open") == (True, "CWE-73")
 
-    def test_suffix_read(self) -> None:
-        assert _is_source_call("file.read") == (True, "CWE-73")
+    def test_exact_sys_stdin_read(self) -> None:
+        assert _is_source_call("sys.stdin.read") == (True, "CWE-73")
 
-    def test_suffix_model_validate(self) -> None:
+    def test_exact_sys_stdin_readline(self) -> None:
+        assert _is_source_call("sys.stdin.readline") == (True, "CWE-73")
+
+    def test_suffix_read_no_longer_flagged(self) -> None:
+        """Issue #5: `.read` suffix match removed (too broad)."""
+        assert _is_source_call("file.read") == (False, "")
+
+    def test_suffix_query_no_longer_flagged(self) -> None:
+        """Issue #5: `.query` suffix match removed for sources (too broad)."""
+        assert _is_source_call("db.query") == (False, "")
+
+    def test_suffix_model_validate_still_flagged(self) -> None:
+        """Issue #5 trade-off: `.model_validate` kept (distinctive Pydantic name)."""
         assert _is_source_call("Foo.model_validate") == (True, "CWE-502")
 
-    def test_suffix_model_validate_json(self) -> None:
-        result = _is_source_call("Foo.model_validate_json")
-        assert result == (True, "CWE-502")
+    def test_suffix_model_validate_json_still_flagged(self) -> None:
+        """Issue #5 trade-off: `.model_validate_json` kept (Pydantic)."""
+        assert _is_source_call("Foo.model_validate_json") == (True, "CWE-502")
 
-    def test_suffix_parse_args(self) -> None:
+    def test_suffix_parse_args_still_flagged(self) -> None:
+        """Issue #5 trade-off: `.parse_args` kept (distinctive argparse name)."""
         assert _is_source_call("parser.parse_args") == (True, "CWE-20")
-
-    def test_suffix_query_source(self) -> None:
-        assert _is_source_call("db.query") == (True, "CWE-74")
 
     def test_not_source(self) -> None:
         assert _is_source_call("print") == (False, "")
@@ -1706,3 +1716,165 @@ class TestSelfMethodResolution:
         assert not any(
             e.callee == "cf.Api.handle.helper" for e in edges
         )
+
+
+# -----------------------------------------------------------------------
+# Regression tests for issue #5:
+# Source detection is suffix-free — only exact matches in SOURCE_EXACT
+# are flagged. Removes the false positives from matching any `.read`,
+# `.parse_args`, `.model_validate`, `.query` method call regardless of
+# receiver type. https://github.com/edhodapp/python-agent/issues/5
+# -----------------------------------------------------------------------
+
+
+class TestSourceDetectionSpecificity:
+    """Regression tests for issue #5."""
+
+    def test_bytesio_read_not_flagged_as_source(
+        self, tmp_path: Any,
+    ) -> None:
+        """Internal buffer `.read()` is NOT a taint source.
+
+        Before the fix, any call ending in `.read` matched the
+        SOURCE_SUFFIX table and flagged the enclosing function
+        as a source (CWE-73). That's a massive false positive:
+        internal buffers like io.BytesIO() are trusted data.
+        """
+        src = textwrap.dedent("""\
+            import io
+
+            def load_default():
+                buf = io.BytesIO(b"{}")
+                return buf.read()
+        """)
+        p = tmp_path / "bufsrc.py"
+        p.write_text(src)
+        funcs, _edges, _supps = parse_file(str(p), "bufsrc")
+        load_default = next(
+            f for f in funcs if f.name == "bufsrc.load_default"
+        )
+        assert load_default.is_source is False
+
+    def test_model_validate_still_flagged(
+        self, tmp_path: Any,
+    ) -> None:
+        """`.model_validate()` remains flagged — distinctive Pydantic name.
+
+        The #5 fix keeps `.model_validate` in SOURCE_SUFFIX because
+        the name is distinctive enough to argparse/Pydantic that the
+        false-positive rate is acceptable. Without this, python_agent's
+        own ontology deserialization (Entity.model_validate,
+        OntologyDAG.model_validate_json) would stop being detected.
+        """
+        src = textwrap.dedent("""\
+            def parse_user_input(data):
+                return MyModel.model_validate(data)
+        """)
+        p = tmp_path / "mv.py"
+        p.write_text(src)
+        funcs, _edges, _supps = parse_file(str(p), "mv")
+        parse_user_input = next(
+            f for f in funcs if f.name == "mv.parse_user_input"
+        )
+        assert parse_user_input.is_source is True
+        assert parse_user_input.source_cwe == "CWE-502"
+
+    def test_parse_args_still_flagged(
+        self, tmp_path: Any,
+    ) -> None:
+        """`parser.parse_args()` remains flagged — distinctive argparse name.
+
+        Without this, ALL of python_agent's CLI entry-point `main()`
+        functions would silently stop being classified as CWE-20
+        sources. The suffix rule stays because `.parse_args` is
+        distinctive enough to rarely collide outside argparse/click.
+        """
+        src = textwrap.dedent("""\
+            import argparse
+
+            def build_and_parse():
+                parser = argparse.ArgumentParser()
+                return parser.parse_args([])
+        """)
+        p = tmp_path / "pa.py"
+        p.write_text(src)
+        funcs, _edges, _supps = parse_file(str(p), "pa")
+        build_and_parse = next(
+            f for f in funcs if f.name == "pa.build_and_parse"
+        )
+        assert build_and_parse.is_source is True
+        assert build_and_parse.source_cwe == "CWE-20"
+
+    def test_query_suffix_no_longer_flagged(
+        self, tmp_path: Any,
+    ) -> None:
+        """`.query()` suffix no longer flagged.
+
+        Same trade-off. An arbitrary object's `.query(...)` method
+        is not a guaranteed source; the prior suffix rule flagged
+        Django ORM, SDK, SQL, and any other unrelated method with
+        the same name.
+        """
+        src = textwrap.dedent("""\
+            def run_orm():
+                return db.query("SELECT 1")
+        """)
+        p = tmp_path / "q.py"
+        p.write_text(src)
+        funcs, _edges, _supps = parse_file(str(p), "q")
+        run_orm = next(f for f in funcs if f.name == "q.run_orm")
+        assert run_orm.is_source is False
+
+    def test_input_builtin_still_flagged(
+        self, tmp_path: Any,
+    ) -> None:
+        """`input()` exact match remains flagged (regression guard)."""
+        src = textwrap.dedent("""\
+            def read_name():
+                return input()
+        """)
+        p = tmp_path / "inp.py"
+        p.write_text(src)
+        funcs, _edges, _supps = parse_file(str(p), "inp")
+        read_name = next(
+            f for f in funcs if f.name == "inp.read_name"
+        )
+        assert read_name.is_source is True
+        assert read_name.source_cwe == "CWE-20"
+
+    def test_json_loads_still_flagged(
+        self, tmp_path: Any,
+    ) -> None:
+        """`json.loads()` exact match remains flagged (regression guard)."""
+        src = textwrap.dedent("""\
+            import json
+
+            def parse_body():
+                return json.loads("{}")
+        """)
+        p = tmp_path / "jl.py"
+        p.write_text(src)
+        funcs, _edges, _supps = parse_file(str(p), "jl")
+        parse_body = next(
+            f for f in funcs if f.name == "jl.parse_body"
+        )
+        assert parse_body.is_source is True
+        assert parse_body.source_cwe == "CWE-502"
+
+    def test_open_still_flagged(
+        self, tmp_path: Any,
+    ) -> None:
+        """`open()` exact match remains flagged (regression guard)."""
+        src = textwrap.dedent("""\
+            def load_file():
+                f = open("/tmp/x")
+                return f
+        """)
+        p = tmp_path / "op.py"
+        p.write_text(src)
+        funcs, _edges, _supps = parse_file(str(p), "op")
+        load_file = next(
+            f for f in funcs if f.name == "op.load_file"
+        )
+        assert load_file.is_source is True
+        assert load_file.source_cwe == "CWE-73"

@@ -80,14 +80,21 @@ SOURCE_EXACT: dict[str, str] = {
     "json.loads": "CWE-502",
     "json.load": "CWE-502",
     "open": "CWE-73",
+    "sys.stdin.read": "CWE-73",
+    "sys.stdin.readline": "CWE-73",
 }
 
+# Issue #5 trade-off: `.read` and `.query` suffixes were removed
+# because every file-like object, buffer, DB driver, SDK, and
+# arbitrary object has methods with those names — the false
+# positive rate drowned out real findings. The remaining suffixes
+# are distinctive naming chosen by argparse and Pydantic, with
+# low collision rates in practice. A future pattern-based detector
+# can replace even these with precise receiver-type matching.
 SOURCE_SUFFIX: dict[str, str] = {
-    ".read": "CWE-73",
     ".model_validate": "CWE-502",
     ".model_validate_json": "CWE-502",
     ".parse_args": "CWE-20",
-    ".query": "CWE-74",
 }
 
 SINK_EXACT: dict[str, str] = {
@@ -143,7 +150,13 @@ def _attr_parts(node: ast.Attribute) -> list[str]:
 
 
 def _is_source_call(name: str) -> tuple[bool, str]:
-    """Check whether *name* matches a source pattern."""
+    """Check whether *name* matches a source pattern.
+
+    Issue #5: `.read` and `.query` suffix matches were removed
+    (massive false-positive rate on common method names).
+    `.parse_args`, `.model_validate`, and `.model_validate_json`
+    remain because they're distinctive to argparse and Pydantic.
+    """
     if name in SOURCE_EXACT:
         return True, SOURCE_EXACT[name]
     for suffix, cwe in SOURCE_SUFFIX.items():
