@@ -33,7 +33,7 @@ All Python code must meet these standards before commit:
    - Use Pydantic `BaseModel` for data structures (not dataclasses).
    - Add `# type: ignore[<code>]` with specific error codes only for third-party libraries without stubs.
 9. **Call graph taint analysis** — no unguarded source-to-sink paths
-   - Run: `.venv/bin/call-graph src/`
+   - Run: `.venv/bin/aofire-call-graph src/`
    - Traces data flow from external inputs (CLI args, keyboard, file reads, JSON parsing, SDK responses) through the call graph to dangerous sinks (eval, subprocess, file writes, prompt injection).
    - Each finding tagged with a CWE code. Use `--sarif` for CI integration.
    - Fix findings by adding sanitizers: `frame_data()` for prompts, Pydantic validation for data, `tool_guard` for commands.

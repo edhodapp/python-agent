@@ -31,12 +31,12 @@ dev = [
 ]
 
 [project.scripts]
-coding-agent = "python_agent.coding_agent:main"
-planning-agent = "python_agent.planning_agent:main"
-discovery-agent = "python_agent.discovery_agent:main"
-divergence-agent = "python_agent.divergence_agent:main"
-convergence-agent = "python_agent.convergence_agent:main"
-call-graph = "python_agent.call_graph:main"
+aofire-coding-agent = "python_agent.coding_agent:main"
+aofire-planning-agent = "python_agent.planning_agent:main"
+aofire-discovery-agent = "python_agent.discovery_agent:main"
+aofire-divergence-agent = "python_agent.divergence_agent:main"
+aofire-convergence-agent = "python_agent.convergence_agent:main"
+aofire-call-graph = "python_agent.call_graph:main"
 
 [project.urls]
 Homepage = "https://github.com/edhodapp/python-agent"

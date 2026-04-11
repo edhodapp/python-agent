@@ -73,7 +73,7 @@ def parse_args(
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Entry point for the planning-agent CLI."""
+    """Entry point for the aofire-planning-agent CLI."""
     args = parse_args(argv)
     asyncio.run(run(args.description, args.model))
     return 0

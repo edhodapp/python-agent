@@ -640,7 +640,7 @@ def format_sarif(
             {
                 "tool": {
                     "driver": {
-                        "name": "call-graph",
+                        "name": "aofire-call-graph",
                         "version": "0.1.0",
                     },
                 },
@@ -677,7 +677,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Entry point for the call-graph CLI."""
+    """Entry point for the aofire-call-graph CLI."""
     args = parse_args(argv)
     graph = build_graph(args.directory)
     paths = find_taint_paths(graph)

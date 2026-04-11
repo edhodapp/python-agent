@@ -13,4 +13,4 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install -e ".[dev]"
-      - run: call-graph src/python_agent/
+      - run: aofire-call-graph src/python_agent/

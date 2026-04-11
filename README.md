@@ -24,12 +24,12 @@ A monorepo containing six CLI tools and a shared ontology framework:
 
 | Tool | Mode | Purpose |
 |------|------|---------|
-| `discovery-agent` | Interactive | Build a domain ontology through conversation |
-| `divergence-agent` | Autonomous | Generate N candidate solution architectures |
-| `convergence-agent` | Interactive | Compare, select, and refine candidates |
-| `coding-agent` | Autonomous | Write production-quality code with Sonnet/Opus escalation |
-| `planning-agent` | Interactive | Freeform project design (no ontology) |
-| `call-graph` | Analysis | Source-to-sink taint analysis with CWE tagging |
+| `aofire-discovery-agent` | Interactive | Build a domain ontology through conversation |
+| `aofire-divergence-agent` | Autonomous | Generate N candidate solution architectures |
+| `aofire-convergence-agent` | Interactive | Compare, select, and refine candidates |
+| `aofire-coding-agent` | Autonomous | Write production-quality code with Sonnet/Opus escalation |
+| `aofire-planning-agent` | Interactive | Freeform project design (no ontology) |
+| `aofire-call-graph` | Analysis | Source-to-sink taint analysis with CWE tagging |
 
 Plus shared infrastructure:
 
@@ -60,7 +60,7 @@ python3 -m venv .venv
 ## The Ontology Pipeline
 
 ```
-discovery-agent  -->  divergence-agent  -->  convergence-agent  -->  coding-agent
+aofire-discovery-agent  -->  aofire-divergence-agent  -->  aofire-convergence-agent  -->  aofire-coding-agent
   (interactive)        (autonomous)          (interactive)           (autonomous)
   Build domain         Generate N            Compare, select,        Write code to
   ontology             solution candidates   accept, refine          production standards
@@ -76,7 +76,7 @@ Build a domain ontology interactively. The agent asks questions about
 your domain and constructs entities, relationships, and constraints.
 
 ```bash
-discovery-agent "A URL shortener service" --dag-file shortener.json
+aofire-discovery-agent "A URL shortener service" --dag-file shortener.json
 ```
 
 Example session:
@@ -117,7 +117,7 @@ key architectural decision points, then generates one complete solution
 per strategy.
 
 ```bash
-divergence-agent --dag-file shortener.json -n 3
+aofire-divergence-agent --dag-file shortener.json -n 3
 ```
 
 ```
@@ -148,7 +148,7 @@ Compare candidates, select one, and refine it interactively. The LLM
 has context of all candidates and assists with comparisons.
 
 ```bash
-convergence-agent --dag-file shortener.json
+aofire-convergence-agent --dag-file shortener.json
 ```
 
 ```
@@ -190,7 +190,7 @@ everything passes. Starts with Sonnet for cost efficiency; automatically
 escalates to Opus if it gets stuck.
 
 ```bash
-coding-agent "Implement the URL shortener from the accepted design" -d ./shortener --dag-file shortener.json
+aofire-coding-agent "Implement the URL shortener from the accepted design" -d ./shortener --dag-file shortener.json
 ```
 
 Pass `--dag-file` to give the coding agent the ontology as structured design
@@ -206,7 +206,7 @@ The agent's workflow (11 steps):
 6. Iterate on failures
 7. mutmut (100% kill rate)
 8. Fuzz tests for external-input functions
-9. call-graph taint analysis
+9. aofire-call-graph taint analysis
 10. Functional test gap analysis
 11. Commit
 
@@ -227,7 +227,7 @@ Re-run convergence on the same DAG to navigate back and try a different
 branch. All intermediate states are preserved:
 
 ```bash
-convergence-agent --dag-file shortener.json
+aofire-convergence-agent --dag-file shortener.json
 > back
 > select 2
 > accept
@@ -238,21 +238,21 @@ convergence-agent --dag-file shortener.json
 For freeform project design without the ontology pipeline:
 
 ```bash
-planning-agent "A CLI tool that converts CSV to JSON with schema validation"
+aofire-planning-agent "A CLI tool that converts CSV to JSON with schema validation"
 ```
 
 Uses Opus by default. Produces a structured markdown plan. Type `quit` to end.
 
-## Static Analysis: call-graph
+## Static Analysis: aofire-call-graph
 
 Source-to-sink taint analysis using Python's `ast` module. Traces data
 flow from external inputs through the call graph to dangerous sinks.
 Each finding tagged with a CWE code.
 
 ```bash
-call-graph src/python_agent/                    # text report
-call-graph src/python_agent/ --sarif            # SARIF JSON for CI
-call-graph src/python_agent/ --include-sanitized  # show all paths
+aofire-call-graph src/python_agent/                    # text report
+aofire-call-graph src/python_agent/ --sarif            # SARIF JSON for CI
+aofire-call-graph src/python_agent/ --include-sanitized  # show all paths
 ```
 
 Sources detected: `input()`, `json.loads`, `open()`, `.model_validate()`,
@@ -332,7 +332,7 @@ See `CLAUDE.md` for the complete coding standards.
 - Autonomous coding agent with Sonnet/Opus escalation
 - All security hardening layers active
 - 570 tests, 14 source files, all quality gates pass
-- call-graph reports clean (no unguarded taint paths)
+- aofire-call-graph reports clean (no unguarded taint paths)
 
 **What's next:**
 - Wire coding agent to consume ontology nodes as implementation specs
@@ -353,7 +353,7 @@ python3 -m venv .venv
 .venv/bin/pytest --cov --cov-branch --cov-report=term-missing
 .venv/bin/mutmut run
 .venv/bin/pytest tests/test_fuzz.py --hypothesis-profile=ci
-.venv/bin/call-graph src/python_agent/
+.venv/bin/aofire-call-graph src/python_agent/
 ```
 
 ## Local PyPI with devpi

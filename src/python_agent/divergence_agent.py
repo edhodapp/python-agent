@@ -285,7 +285,7 @@ def parse_args(
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Entry point for the divergence-agent CLI."""
+    """Entry point for the aofire-divergence-agent CLI."""
     args = parse_args(argv)
     count = asyncio.run(
         run(

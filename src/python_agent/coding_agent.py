@@ -174,7 +174,7 @@ def parse_args(
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Entry point for the coding-agent CLI."""
+    """Entry point for the aofire-coding-agent CLI."""
     args = parse_args(argv)
     asyncio.run(
         run(

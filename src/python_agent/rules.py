@@ -81,7 +81,7 @@ For each task:
 8. For any new functions that accept external inputs (CLI args, SDK
    messages, keyboard input, filesystem data), add `@given(...)` fuzz
    tests in `tests/test_fuzz.py`. Run `.venv/bin/pytest tests/test_fuzz.py`.
-9. Run `.venv/bin/call-graph src/` — no unguarded source-to-sink taint
+9. Run `.venv/bin/aofire-call-graph src/` — no unguarded source-to-sink taint
    paths. If findings appear, add sanitizers (frame_data for prompts,
    validation for data, tool_guard for commands) or fix the data flow.
 10. Analyze every changed function for functional test gaps: enumerate
@@ -101,7 +101,7 @@ You MUST fix these yourself without asking:
 - pytest failures (fix code or tests)
 - mutmut survivors (add targeted tests)
 - Fuzz test crashes (fix the bug)
-- call-graph findings where you can add a sanitizer
+- aofire-call-graph findings where you can add a sanitizer
 
 You MUST NOT suppress, disable, or work around these without user
 approval. Instead, compile a list and present it as your final output:
