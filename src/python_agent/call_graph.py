@@ -333,12 +333,18 @@ class _CallVisitor(ast.NodeVisitor):
         self.edges: list[CallEdge] = []
         self._current_func: str | None = None
         self._scope_stack: list[str] = []
+        # Class names only (subset of scope stack). Needed to resolve
+        # `self.X` / `cls.X` calls to the innermost enclosing class
+        # without also pulling in function scopes. Issue #4.
+        self._class_stack: list[str] = []
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         self._scope_stack.append(node.name)
+        self._class_stack.append(node.name)
         try:
             self.generic_visit(node)
         finally:
+            self._class_stack.pop()
             self._scope_stack.pop()
 
     def _visit_func(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
@@ -359,13 +365,26 @@ class _CallVisitor(ast.NodeVisitor):
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
         self._visit_func(node)
 
+    def _resolve_with_self(self, raw: str) -> str:
+        """Resolve `self.X` / `cls.X` to the innermost enclosing class.
+
+        Only handles the simple two-part case (`self.X`, `cls.X`).
+        Deeper attribute chains like `self.foo.bar` require type
+        inference and fall through to the generic resolver. Issue #4.
+        """
+        if not self._class_stack:
+            return _resolve_callee(raw, self.imports, self.module)
+        parts = raw.split(".")
+        if len(parts) == 2 and parts[0] in ("self", "cls"):
+            prefix = ".".join(self._class_stack)
+            return f"{self.module}.{prefix}.{parts[1]}"
+        return _resolve_callee(raw, self.imports, self.module)
+
     def visit_Call(self, node: ast.Call) -> None:
         if self._current_func is not None:
             raw = _resolve_call_name(node)
             if raw:
-                callee = _resolve_callee(
-                    raw, self.imports, self.module,
-                )
+                callee = self._resolve_with_self(raw)
                 self.edges.append(CallEdge(
                     caller=self._current_func,
                     callee=callee,

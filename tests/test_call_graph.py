@@ -1504,3 +1504,205 @@ class TestNestedFunctionScope:
         )
         # Specifically NOT the pre-fix broken caller `ne.inner`.
         assert not any(e.caller == "ne.inner" for e in edges)
+
+
+# -----------------------------------------------------------------------
+# Regression tests for issue #4:
+# _resolve_callee must resolve `self.method()` / `cls.method()` to the
+# enclosing class's method FQN, or taint flows through method calls
+# are invisible to the analyzer.
+# https://github.com/edhodapp/python-agent/issues/4
+# -----------------------------------------------------------------------
+
+
+class TestSelfMethodResolution:
+    """Regression tests for issue #4."""
+
+    def test_self_method_edge_resolves_to_class_fqn(
+        self, tmp_path: Any,
+    ) -> None:
+        """`self.helper()` inside a class method becomes `mod.Class.helper`.
+
+        Before the fix, _resolve_callee returned the raw `self.helper`
+        unchanged. The edge was a ghost — the callee never matched
+        any node in graph.functions, so BFS couldn't follow the
+        taint through it.
+        """
+        src = textwrap.dedent("""\
+            class Api:
+                def handle(self):
+                    self.helper()
+
+                def helper(self):
+                    pass
+        """)
+        p = tmp_path / "sm.py"
+        p.write_text(src)
+        _funcs, edges, _supps = parse_file(str(p), "sm")
+        assert any(
+            e.caller == "sm.Api.handle" and e.callee == "sm.Api.helper"
+            for e in edges
+        )
+        # Specifically NOT the raw unresolved "self.helper".
+        assert not any(e.callee == "self.helper" for e in edges)
+
+    def test_self_method_call_enables_taint_path(
+        self, tmp_path: Any,
+    ) -> None:
+        """End-to-end: taint flows through a `self.method()` edge.
+
+        The real user-visible bug: a call from a source method to a
+        sink method via `self.X()` was invisible to BFS because the
+        edge went to an unresolved raw name. Now the edge resolves
+        to the class-scoped method FQN, the BFS reaches the sink,
+        and the taint path is reported.
+        """
+        src = textwrap.dedent("""\
+            class Api:
+                def handle(self):
+                    code = input()
+                    self.run_code(code)
+
+                def run_code(self, code):
+                    eval(code)
+        """)
+        (tmp_path / "tp.py").write_text(src)
+        graph = build_graph(str(tmp_path))
+        paths = find_taint_paths(graph)
+        assert len(paths) == 1
+        assert paths[0].source == "tp.Api.handle"
+        assert paths[0].sink == "tp.Api.run_code"
+        assert paths[0].cwe == "CWE-94"
+
+    def test_cls_method_call_resolves_to_class_fqn(
+        self, tmp_path: Any,
+    ) -> None:
+        """`cls.method()` in a classmethod resolves like `self.method()`."""
+        src = textwrap.dedent("""\
+            class Api:
+                @classmethod
+                def factory(cls):
+                    cls.make()
+
+                @classmethod
+                def make(cls):
+                    pass
+        """)
+        p = tmp_path / "cm.py"
+        p.write_text(src)
+        _funcs, edges, _supps = parse_file(str(p), "cm")
+        assert any(
+            e.caller == "cm.Api.factory" and e.callee == "cm.Api.make"
+            for e in edges
+        )
+
+    def test_self_in_nested_class_uses_full_class_path(
+        self, tmp_path: Any,
+    ) -> None:
+        """`self.X` in a method of a nested class uses the full class path."""
+        src = textwrap.dedent("""\
+            class Outer:
+                class Inner:
+                    def method(self):
+                        self.helper()
+
+                    def helper(self):
+                        pass
+        """)
+        p = tmp_path / "nc.py"
+        p.write_text(src)
+        _funcs, edges, _supps = parse_file(str(p), "nc")
+        assert any(
+            e.caller == "nc.Outer.Inner.method"
+            and e.callee == "nc.Outer.Inner.helper"
+            for e in edges
+        )
+
+    def test_unrelated_obj_method_call_stays_unresolved(
+        self, tmp_path: Any,
+    ) -> None:
+        """`obj.method()` where `obj` is not self/cls is NOT over-resolved.
+
+        Type inference is out of scope. The tool must not invent a
+        wrong resolution (e.g., pretending `other.method()` means
+        the enclosing class's `method`). Raw names stay as raw names
+        so BFS misses are visible as missing edges, not wrong edges.
+        """
+        src = textwrap.dedent("""\
+            class Api:
+                def handle(self, other):
+                    other.method()
+        """)
+        p = tmp_path / "oo.py"
+        p.write_text(src)
+        _funcs, edges, _supps = parse_file(str(p), "oo")
+        # The edge exists with the raw "other.method" callee.
+        assert any(
+            e.caller == "oo.Api.handle" and e.callee == "other.method"
+            for e in edges
+        )
+        # Specifically NOT falsely resolved to oo.Api.method.
+        assert not any(e.callee == "oo.Api.method" for e in edges)
+
+    def test_self_attribute_chain_falls_through(
+        self, tmp_path: Any,
+    ) -> None:
+        """`self.foo.bar()` is too deep — not resolved by _resolve_with_self.
+
+        The simple `self.X` rule cannot handle attribute chains —
+        what `self.foo` is bound to requires type inference we do
+        not attempt. The resolver must leave such raw names alone
+        rather than inventing a wrong resolution like
+        `mod.Class.bar` or `mod.Class.foo.bar`. This locks in the
+        `len == 2` guard, killing `>= 2` / `>= 1` mutations.
+        """
+        src = textwrap.dedent("""\
+            class Api:
+                def handle(self):
+                    self.foo.bar()
+        """)
+        p = tmp_path / "ac.py"
+        p.write_text(src)
+        _funcs, edges, _supps = parse_file(str(p), "ac")
+        assert any(
+            e.caller == "ac.Api.handle" and e.callee == "self.foo.bar"
+            for e in edges
+        )
+        assert not any(e.callee == "ac.Api.bar" for e in edges)
+        assert not any(e.callee == "ac.Api.foo.bar" for e in edges)
+
+    def test_self_method_from_nested_function_uses_enclosing_class(
+        self, tmp_path: Any,
+    ) -> None:
+        """`self.X()` inside a nested def inside a method resolves to the class.
+
+        A closure-captured `self` in a nested `def inner()` inside
+        `Api.handle` still refers to the `Api` instance, so
+        `self.helper()` inside `inner` must resolve to `mod.Api.helper`,
+        NOT `mod.Api.handle.helper`. Locks in the invariant that
+        `_class_stack` is unaffected by entering a function scope
+        — only `_scope_stack` changes in `_visit_func`.
+        """
+        src = textwrap.dedent("""\
+            class Api:
+                def handle(self):
+                    def inner():
+                        self.helper()
+                    inner()
+
+                def helper(self):
+                    pass
+        """)
+        p = tmp_path / "cf.py"
+        p.write_text(src)
+        _funcs, edges, _supps = parse_file(str(p), "cf")
+        assert any(
+            e.caller == "cf.Api.handle.inner"
+            and e.callee == "cf.Api.helper"
+            for e in edges
+        )
+        # Specifically NOT cf.Api.handle.helper (which would happen
+        # if _class_stack incorrectly included the function name).
+        assert not any(
+            e.callee == "cf.Api.handle.helper" for e in edges
+        )
