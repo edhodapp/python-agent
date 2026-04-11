@@ -168,17 +168,48 @@ def _is_sanitizer_name(name: str) -> bool:
     return bare in SANITIZER_NAMES
 
 
+class _FencedCallCollector(ast.NodeVisitor):
+    """Collect Call names at this scope only; fence nested scopes.
+
+    Overrides visit_FunctionDef / visit_AsyncFunctionDef / visit_Lambda
+    to return without recursing, so a nested function's calls stay
+    attributed to the nested function, not the enclosing scope.
+    Issue #3 fix.
+    """
+
+    def __init__(self) -> None:
+        self.names: list[str] = []
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        return
+
+    def visit_AsyncFunctionDef(
+        self, node: ast.AsyncFunctionDef,
+    ) -> None:
+        return
+
+    def visit_Lambda(self, node: ast.Lambda) -> None:
+        return
+
+    def visit_Call(self, node: ast.Call) -> None:
+        n = _resolve_call_name(node)
+        if n:
+            self.names.append(n)
+        self.generic_visit(node)
+
+
 def _collect_calls_in_body(
     body: list[ast.stmt],
 ) -> list[str]:
-    """Walk a function body and return all call names."""
-    names: list[str] = []
-    for node in ast.walk(ast.Module(body=body, type_ignores=[])):
-        if isinstance(node, ast.Call):
-            n = _resolve_call_name(node)
-            if n:
-                names.append(n)
-    return names
+    """Return top-level call names in a function body.
+
+    Nested FunctionDef / AsyncFunctionDef / Lambda bodies are fenced
+    out — their calls belong to themselves, not the enclosing scope.
+    """
+    collector = _FencedCallCollector()
+    for stmt in body:
+        collector.visit(stmt)
+    return collector.names
 
 
 def _classify_as_source(
@@ -208,15 +239,18 @@ def _classify_as_sink(
 # ---------------------------------------------------------------------------
 
 def _make_fqn(
-    module: str, class_stack: list[str], name: str,
+    module: str, scope_stack: list[str], name: str,
 ) -> str:
-    """Build a class-scoped fully qualified name.
+    """Build a scope-qualified fully qualified name.
 
-    Returns `mod.Outer.Inner.method` for nested class methods and
-    `mod.func` for top-level functions. Issue #2 regression guard.
+    Returns `mod.Outer.Inner.method` for a method in a nested class,
+    `mod.outer.inner` for a function nested inside another function,
+    and `mod.func` for a top-level function. The scope stack may
+    contain both class names (from visit_ClassDef) and function
+    names (from _visit_func's push/pop). Issues #2 and #3.
     """
-    if class_stack:
-        prefix = ".".join(class_stack)
+    if scope_stack:
+        prefix = ".".join(scope_stack)
         return f"{module}.{prefix}.{name}"
     return f"{module}.{name}"
 
@@ -246,17 +280,17 @@ class _FunctionVisitor(ast.NodeVisitor):
         self.module = module
         self.functions: list[FunctionInfo] = []
         self.line_to_fqn: dict[int, str] = {}
-        self._class_stack: list[str] = []
+        self._scope_stack: list[str] = []
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
-        self._class_stack.append(node.name)
+        self._scope_stack.append(node.name)
         try:
             self.generic_visit(node)
         finally:
-            self._class_stack.pop()
+            self._scope_stack.pop()
 
     def _visit_func(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
-        fqn = _make_fqn(self.module, self._class_stack, node.name)
+        fqn = _make_fqn(self.module, self._scope_stack, node.name)
         self.line_to_fqn[node.lineno] = fqn
         calls = _collect_calls_in_body(node.body)
         is_src, src_cwe = _classify_as_source(calls)
@@ -271,6 +305,13 @@ class _FunctionVisitor(ast.NodeVisitor):
             source_cwe=src_cwe,
             sink_cwe=snk_cwe,
         ))
+        # Recurse into the body to pick up nested function defs;
+        # push this function's name so nested FQNs include it.
+        self._scope_stack.append(node.name)
+        try:
+            self.generic_visit(node)
+        finally:
+            self._scope_stack.pop()
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         self._visit_func(node)
@@ -291,22 +332,26 @@ class _CallVisitor(ast.NodeVisitor):
         self.imports = imports
         self.edges: list[CallEdge] = []
         self._current_func: str | None = None
-        self._class_stack: list[str] = []
+        self._scope_stack: list[str] = []
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
-        self._class_stack.append(node.name)
+        self._scope_stack.append(node.name)
         try:
             self.generic_visit(node)
         finally:
-            self._class_stack.pop()
+            self._scope_stack.pop()
 
     def _visit_func(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         old = self._current_func
         self._current_func = _make_fqn(
-            self.module, self._class_stack, node.name,
+            self.module, self._scope_stack, node.name,
         )
-        self.generic_visit(node)
-        self._current_func = old
+        self._scope_stack.append(node.name)
+        try:
+            self.generic_visit(node)
+        finally:
+            self._scope_stack.pop()
+            self._current_func = old
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         self._visit_func(node)

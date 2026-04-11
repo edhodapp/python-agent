@@ -1304,3 +1304,203 @@ class TestClassScopedFQN:
         # Default report hides suppressed paths entirely.
         report = format_text_report(paths)
         assert report == "No taint paths found."
+
+
+# -----------------------------------------------------------------------
+# Regression tests for issue #3:
+# Nested function calls must NOT be attributed to the outer function.
+# Nested defs appear as their own nodes in graph.functions with
+# scope-qualified FQNs like `mod.outer.inner`.
+# https://github.com/edhodapp/python-agent/issues/3
+# -----------------------------------------------------------------------
+
+
+class TestNestedFunctionScope:
+    """Regression tests for issue #3."""
+
+    def test_nested_sink_call_not_attributed_to_outer(
+        self, tmp_path: Any,
+    ) -> None:
+        """eval() inside an inner function does NOT make the outer a sink.
+
+        Before the fix, `_collect_calls_in_body` used `ast.walk` on
+        the outer function's body, which descends recursively into
+        nested FunctionDef bodies and picks up their Call nodes. The
+        outer was therefore incorrectly classified as a sink (CWE-94)
+        because its "calls" included the inner's eval().
+        """
+        src = textwrap.dedent("""\
+            def outer(x):
+                def inner():
+                    eval(x)
+                return 42
+        """)
+        p = tmp_path / "nest.py"
+        p.write_text(src)
+        funcs, _edges, _supps = parse_file(str(p), "nest")
+        names = {f.name for f in funcs}
+        assert "nest.outer" in names
+        outer = next(f for f in funcs if f.name == "nest.outer")
+        assert outer.is_sink is False
+        # Inner appears as its own node with the sink tag.
+        assert "nest.outer.inner" in names
+        inner = next(f for f in funcs if f.name == "nest.outer.inner")
+        assert inner.is_sink is True
+        assert inner.sink_cwe == "CWE-94"
+
+    def test_nested_source_call_not_attributed_to_outer(
+        self, tmp_path: Any,
+    ) -> None:
+        """input() inside an inner function does NOT make the outer a source."""
+        src = textwrap.dedent("""\
+            def outer():
+                def inner():
+                    return input()
+                return None
+        """)
+        p = tmp_path / "nsrc.py"
+        p.write_text(src)
+        funcs, _edges, _supps = parse_file(str(p), "nsrc")
+        outer = next(f for f in funcs if f.name == "nsrc.outer")
+        assert outer.is_source is False
+        inner = next(
+            f for f in funcs if f.name == "nsrc.outer.inner"
+        )
+        assert inner.is_source is True
+        assert inner.source_cwe == "CWE-20"
+
+    def test_deeply_nested_functions_get_full_scope_fqn(
+        self, tmp_path: Any,
+    ) -> None:
+        """Three levels of nested functions each carry full scope in FQN."""
+        src = textwrap.dedent("""\
+            def a():
+                def b():
+                    def c():
+                        pass
+                    return c
+                return b
+        """)
+        p = tmp_path / "deep.py"
+        p.write_text(src)
+        funcs, _edges, _supps = parse_file(str(p), "deep")
+        names = {f.name for f in funcs}
+        assert "deep.a" in names
+        assert "deep.a.b" in names
+        assert "deep.a.b.c" in names
+
+    def test_async_nested_def_is_fenced(
+        self, tmp_path: Any,
+    ) -> None:
+        """`async def` inside a sync outer is fenced.
+
+        Covers the `_FencedCallCollector.visit_AsyncFunctionDef`
+        branch. Without this test, a mutmut mutation that removes
+        the `visit_AsyncFunctionDef` override survives because
+        nothing else exercises async nested defs.
+        """
+        src = textwrap.dedent("""\
+            def outer():
+                async def inner():
+                    eval("")
+        """)
+        p = tmp_path / "asn.py"
+        p.write_text(src)
+        funcs, _edges, _supps = parse_file(str(p), "asn")
+        outer = next(f for f in funcs if f.name == "asn.outer")
+        assert outer.is_sink is False
+        inner = next(
+            f for f in funcs if f.name == "asn.outer.inner"
+        )
+        assert inner.is_sink is True
+
+    def test_nested_lambda_sink_not_attributed_to_outer(
+        self, tmp_path: Any,
+    ) -> None:
+        """Lambdas are fenced too — eval in a lambda doesn't flag outer."""
+        src = textwrap.dedent("""\
+            def outer():
+                handlers = [lambda x: eval(x)]
+                return handlers
+        """)
+        p = tmp_path / "lam.py"
+        p.write_text(src)
+        funcs, _edges, _supps = parse_file(str(p), "lam")
+        outer = next(f for f in funcs if f.name == "lam.outer")
+        assert outer.is_sink is False
+
+    def test_nested_function_inside_class_method(
+        self, tmp_path: Any,
+    ) -> None:
+        """Class method with a nested function: scope stack combines class + function."""
+        src = textwrap.dedent("""\
+            class Api:
+                def handle(self, x):
+                    def validator(v):
+                        eval(v)
+                    validator(x)
+        """)
+        p = tmp_path / "cn.py"
+        p.write_text(src)
+        funcs, _edges, _supps = parse_file(str(p), "cn")
+        names = {f.name for f in funcs}
+        assert "cn.Api.handle" in names
+        assert "cn.Api.handle.validator" in names
+        handle = next(
+            f for f in funcs if f.name == "cn.Api.handle"
+        )
+        # eval lives in the nested validator; handle must not inherit
+        assert handle.is_sink is False
+        validator = next(
+            f for f in funcs if f.name == "cn.Api.handle.validator"
+        )
+        assert validator.is_sink is True
+
+    def test_top_level_function_fqn_regression_guard(
+        self, tmp_path: Any,
+    ) -> None:
+        """Simple top-level function — no nesting, no scope prefix."""
+        src = textwrap.dedent("""\
+            def standalone():
+                eval("")
+        """)
+        p = tmp_path / "s.py"
+        p.write_text(src)
+        funcs, _edges, _supps = parse_file(str(p), "s")
+        names = {f.name for f in funcs}
+        assert "s.standalone" in names
+        # And specifically nothing like s.standalone.standalone.
+        matching = [n for n in names if n.startswith("s.standalone")]
+        assert matching == ["s.standalone"]
+        standalone = next(
+            f for f in funcs if f.name == "s.standalone"
+        )
+        assert standalone.is_sink is True
+
+    def test_nested_function_edge_caller_is_scope_qualified(
+        self, tmp_path: Any,
+    ) -> None:
+        """Edges from a nested function use the full scope-qualified caller FQN.
+
+        Explicit coverage for `_CallVisitor._scope_stack` push/pop.
+        A mutmut mutation removing the push in `_CallVisitor._visit_func`
+        would cause `inner`'s edges to be attributed to `ne.inner`
+        instead of `ne.outer.inner`, which this test catches.
+        """
+        src = textwrap.dedent("""\
+            def outer():
+                def inner():
+                    helper()
+
+            def helper():
+                pass
+        """)
+        p = tmp_path / "ne.py"
+        p.write_text(src)
+        _funcs, edges, _supps = parse_file(str(p), "ne")
+        assert any(
+            e.caller == "ne.outer.inner" and e.callee == "ne.helper"
+            for e in edges
+        )
+        # Specifically NOT the pre-fix broken caller `ne.inner`.
+        assert not any(e.caller == "ne.inner" for e in edges)
