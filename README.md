@@ -325,7 +325,7 @@ See `CLAUDE.md` for the complete coding standards.
 
 ## Project Status
 
-**Version:** 0.1.0
+**Version:** 0.1.1
 
 **What works:**
 - Full ontology pipeline: discovery, divergence, convergence

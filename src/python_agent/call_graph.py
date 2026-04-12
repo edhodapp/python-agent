@@ -729,7 +729,7 @@ def format_sarif(
                 "tool": {
                     "driver": {
                         "name": "aofire-call-graph",
-                        "version": "0.1.0",
+                        "version": "0.1.1",
                     },
                 },
                 "results": results,
