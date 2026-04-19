@@ -15,7 +15,7 @@ structured ontology exploration, branching solution candidates, and
 an autonomous coding agent that enforces 10 quality gates before
 every commit.
 
-**BSD 3-Clause.** Python 3.11+. Requires the
+**AGPL-3.0-or-later.** Python 3.11+. Requires the
 [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk-python).
 
 ## What This Is
@@ -377,4 +377,4 @@ pip install aofire-python-agent -i http://localhost:3141/myuser/dev/+simple/
 
 ## License
 
-BSD 3-Clause. See [LICENSE](LICENSE).
+AGPL-3.0-or-later. See [LICENSE](LICENSE).
